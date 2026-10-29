@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Approvals{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Approval center</h1><div class="muted">Sensitive or costly operations wait here for an authorized human decision.</div></div></div>
+<div class="card" style="margin-bottom:16px"><h2>Pending</h2>{% for a in pending %}<div class="card" style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><div><span class="badge b-purple">{{ a.get_kind_display }}</span> <strong>{{ a.title }}</strong><div class="muted small">Requested by {{ a.requested_by_label }} · {{ a.created_at|timesince }} ago · needs {{ a.get_required_authority_display }}</div></div>{% if a.task %}<a href="{% url 'task_detail' a.task_id %}">View task</a>{% endif %}</div>
+{% if a.description %}<pre class="small" style="margin-top:8px">{{ a.description|truncatechars:800 }}</pre>{% endif %}
+<form method="post" class="row" style="margin-top:8px">{% csrf_token %}<input type="hidden" name="approval" value="{{ a.pk }}"><input class="input" name="note" placeholder="Decision note" style="max-width:320px"><button class="btn primary" name="decision" value="approve">Approve</button><button class="btn danger" name="decision" value="reject">Reject</button></form></div>
+{% empty %}<div class="empty">Nothing awaiting approval.</div>{% endfor %}</div>
+<div class="card table-wrap"><h2>Recent decisions</h2><table class="table"><tbody>{% for a in decided %}<tr><td>{{ a.title }}</td><td><span class="badge {{ a.status|badge }}">{{ a.get_status_display }}</span></td><td>{{ a.decided_by.username }}</td><td class="small">{{ a.decision_note }}</td><td class="muted small">{{ a.decided_at|timesince }} ago</td></tr>{% empty %}<tr><td><div class="empty">No decisions yet.</div></td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}New employee{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>New AI employee</h1><div class="muted">Start from a role template, then configure models and tools on the employee page.</div></div></div>
+<div class="grid g3"><div class="card span2"><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Create employee</button></form></div>
+<div class="card"><h2>Role templates</h2><div class="small muted">Pick one to prefill the form.</div>{% regroup templates by category as cats %}{% for c in cats %}<h3 style="margin-top:12px">{{ c.grouper|default:"Custom" }}</h3>{% for t in c.list %}<div><a href="?template={{ t.pk }}">{{ t.name }}</a></div>{% endfor %}{% empty %}<div class="empty">No templates. Run <code>manage.py seed_vcoos</code>.</div>{% endfor %}</div></div>
+{% endblock %}

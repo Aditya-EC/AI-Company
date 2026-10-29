@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Budgets{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Budgets</h1><div class="muted">Paid model calls require a company budget (fail-safe). Spend uses verified billed cost when available, otherwise estimates.</div></div>
+<span class="badge {% if company.paid_models_enabled %}b-warn{% else %}b-ok{% endif %}">Paid models {{ company.paid_models_enabled|yesno:"enabled,disabled" }}</span></div>
+<div class="grid {% if form %}g3{% endif %}"><div class="card {% if form %}span2{% endif %} table-wrap"><table class="table"><thead><tr><th>Budget</th><th>Target</th><th>Spent</th><th>Used</th><th></th></tr></thead><tbody>
+{% for b, spent in rows %}<tr><td>{{ b.get_scope_display }} · {{ b.get_period_display }} · ${{ b.limit_usd }}</td><td>{{ b.department.name|default:"" }}{{ b.employee.name|default:"" }}{{ b.project.name|default:"" }}{{ b.provider.name|default:"" }}{% if b.scope == "company" %}Company{% endif %}</td><td>${{ spent|floatformat:4 }}</td>
+<td style="min-width:120px"><div style="height:6px;background:var(--muted-bg);border-radius:4px"><div style="height:6px;width:{{ spent|pct:b.limit_usd }}%;background:{% if spent|pct:b.limit_usd >= 90 %}var(--bad){% else %}var(--accent){% endif %};border-radius:4px"></div></div><span class="small muted">{{ spent|pct:b.limit_usd }}%</span></td>
+<td>{% if form %}<form method="post">{% csrf_token %}<input type="hidden" name="budget" value="{{ b.pk }}"><button class="btn sm" name="action" value="deactivate">Deactivate</button></form>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5"><div class="empty">No budgets configured — all paid model calls will be denied.</div></td></tr>{% endfor %}</tbody></table></div>
+{% if form %}<div class="card"><h2>New budget</h2><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Create budget</button></form></div>{% endif %}</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% for field in form.hidden_fields %}{{ field }}{% endfor %}
+{% if form.non_field_errors %}<div class="messages"><li class="error">{{ form.non_field_errors|join:" " }}</li></div>{% endif %}
+<div class="form-grid">
+{% for field in form.visible_fields %}
+  {% if field.widget_type == "checkbox" %}
+  <div class="field checkbox">{{ field }}<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}{% if field.errors %}<div class="errors">{{ field.errors|join:" " }}</div>{% endif %}</div></div>
+  {% else %}
+  <div class="field{% if field.widget_type == 'textarea' or field.widget_type == 'selectmultiple' %} wide{% endif %}">
+    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+    {{ field }}
+    {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+    {% if field.errors %}<div class="errors">{{ field.errors|join:" " }}</div>{% endif %}
+  </div>
+  {% endif %}
+{% endfor %}
+</div>

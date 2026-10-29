@@ -1,0 +1,10 @@
+[Unit]
+Description=VCoOS database backup
+
+[Service]
+Type=oneshot
+User=vcoos
+WorkingDirectory=/opt/vcoos
+EnvironmentFile=/etc/vcoos/vcoos.env
+ExecStart=/opt/vcoos/.venv/bin/python manage.py backup_db
+ExecStartPost=/opt/vcoos/.venv/bin/python manage.py verify_audit

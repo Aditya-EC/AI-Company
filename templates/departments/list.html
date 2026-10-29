@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}Departments{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Departments</h1><div class="muted">Each department is a room in the virtual office.</div></div></div>
+<div class="grid {% if form %}g3{% endif %}">
+<div class="card {% if form %}span2{% endif %}"><div class="table-wrap"><table class="table"><thead><tr><th>Department</th><th>Employees</th><th>Open tasks</th><th>Status</th></tr></thead><tbody>
+{% for d in departments %}<tr><td><span class="dot" style="background:{{ d.color }}"></span> <a href="{% url 'department_detail' d.pk %}">{{ d.name }}</a><div class="muted small">{{ d.description|truncatechars:80 }}</div></td><td>{{ d.n_emp }}</td><td>{{ d.n_open }}</td>
+<td>{% if not d.is_active %}<span class="badge">Inactive</span>{% elif d.is_paused %}<span class="badge b-warn">Paused</span>{% else %}<span class="badge b-ok">Active</span>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="4"><div class="empty">No departments yet.{% if form %} Create the first one, or run <code>manage.py seed_vcoos --with-departments</code>.{% endif %}</div></td></tr>{% endfor %}
+</tbody></table></div></div>
+{% if form %}<div class="card"><h2>New department</h2><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Create department</button></form></div>{% endif %}
+</div>{% endblock %}

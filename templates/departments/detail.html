@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}{{ dept.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><span class="dot" style="background:{{ dept.color }}"></span> {{ dept.name }}</h1><div class="muted">{{ dept.description }}</div></div>
+{% if perm.manage_departments %}<form method="post" class="row">{% csrf_token %}{% if dept.is_paused %}<button class="btn" name="action" value="resume">Resume department</button>{% else %}<button class="btn danger" name="action" value="pause" data-confirm="Pause all work in {{ dept.name }}? Running tasks stop at their next safe checkpoint.">Pause department</button>{% endif %}</form>{% endif %}</div>
+<div class="grid g3">
+<div class="card span2"><h2>Employees</h2><table class="table"><tbody>{% for e in employees %}<tr><td><a href="{% url 'employee_detail' e.pk %}">{{ e.name }}</a> <span class="muted small">{{ e.employee_id }}</span></td><td>{{ e.job_title }}</td><td><span class="badge {{ e.status|badge }}">{{ e.get_status_display }}</span></td></tr>{% empty %}<tr><td><div class="empty">No employees.</div></td></tr>{% endfor %}</tbody></table>
+<h2 style="margin-top:20px">Open tasks</h2><table class="table"><tbody>{% for t in tasks %}<tr><td><a href="{% url 'task_detail' t.pk %}">{{ t.code }} {{ t.title }}</a></td><td>{{ t.assigned_employee.name|default:"unassigned" }}</td><td><span class="badge {{ t.status|badge }}">{{ t.get_status_display }}</span></td></tr>{% empty %}<tr><td><div class="empty">No open tasks.</div></td></tr>{% endfor %}</tbody></table></div>
+<div class="stack">
+<div class="card"><h2>Workload</h2><dl class="kv">{% for s, n in stats.items %}<dt>{{ s }}</dt><dd>{{ n }}</dd>{% empty %}<dt>Tasks</dt><dd>none</dd>{% endfor %}</dl></div>
+<div class="card"><h2>Department tools</h2>{% for g in tool_grants %}<div><span class="badge {% if g.allow %}b-ok{% else %}b-bad{% endif %}">{% if g.allow %}allow{% else %}deny{% endif %}</span> <span class="mono">{{ g.tool.slug }}</span></div>{% empty %}<div class="muted small">No department-level grants.</div>{% endfor %}<p class="small"><a href="{% url 'tool_registry' %}">Manage in tool registry</a></p></div>
+{% if form %}<div class="card"><h2>Edit</h2><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary" name="action" value="save">Save</button></form></div>{% endif %}
+</div></div>{% endblock %}

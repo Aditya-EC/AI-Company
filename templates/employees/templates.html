@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}Role templates{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Role templates</h1><div class="muted">Roles are data, not code: create custom roles here.</div></div></div>
+<div class="grid {% if form %}g3{% endif %}"><div class="card {% if form %}span2{% endif %} table-wrap"><table class="table"><thead><tr><th>Role</th><th>Category</th><th>Skills</th><th>Employees</th><th></th></tr></thead><tbody>
+{% for t in templates %}<tr><td><strong>{{ t.name }}</strong><div class="muted small">{{ t.description }}</div></td><td>{{ t.category }}</td><td class="small">{{ t.skills|join:", " }}</td><td>{{ t.n }}</td><td>{% if perm.manage_employees %}<a class="btn sm" href="{% url 'employee_create' %}?template={{ t.pk }}">Hire</a>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5"><div class="empty">No templates yet.</div></td></tr>{% endfor %}</tbody></table></div>
+{% if form %}<div class="card"><h2>Custom role</h2><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Create role</button></form></div>{% endif %}</div>
+{% endblock %}

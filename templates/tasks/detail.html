@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}{{ task.code }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="mono muted">{{ task.code }}{% if task.parent_task %} · revision of <a href="{% url 'task_detail' task.parent_task_id %}">T-{{ task.parent_task_id }}</a>{% endif %}</div><h1>{{ task.title }}</h1>
+<div class="row"><span class="badge {{ task.status|badge }}" id="task-status">{{ task.get_status_display }}</span><span class="muted small">{{ task.status_reason }}</span>{% if task.cancel_requested %}<span class="badge b-warn">cancel requested</span>{% endif %}{% if task.pause_requested %}<span class="badge b-warn">pause requested</span>{% endif %}</div></div>
+{% if can_manage %}<form method="post" action="{% url 'task_action' task.pk %}" class="row">{% csrf_token %}
+{% if task.status == "draft" or task.status == "approved" %}<button class="btn primary" name="action" value="queue">Submit to engine</button>{% endif %}
+{% if task.status == "running" or task.status == "queued" or task.status == "blocked" %}<button class="btn" name="action" value="pause">Pause</button>{% endif %}
+{% if task.status == "paused" %}<button class="btn primary" name="action" value="resume">Resume</button>{% endif %}
+{% if task.status == "failed" or task.status == "waiting_input" %}<button class="btn primary" name="action" value="retry">Retry</button>{% endif %}
+{% if task.status != "completed" and task.status != "cancelled" %}<button class="btn danger" name="action" value="cancel" data-confirm="Cancel {{ task.code }}? Running work stops at the next safe checkpoint.">Cancel</button>{% endif %}
+</form>{% endif %}</div>
+
+<div class="grid g3">
+<div class="span2 stack">
+  <div class="card"><h2>Description</h2><div style="white-space:pre-wrap">{{ task.description }}</div>{% if task.acceptance_criteria %}<h3 style="margin-top:14px">Acceptance criteria</h3><div style="white-space:pre-wrap">{{ task.acceptance_criteria }}</div>{% endif %}</div>
+  {% if task.status == "under_review" and can_review %}<div class="card" style="border-color:var(--accent)"><h2>Review deliverable</h2><p class="muted small">Check the output below against the acceptance criteria. Rejection creates a revision task carrying your feedback.</p>
+  <form method="post" action="{% url 'task_action' task.pk %}">{% csrf_token %}<input type="hidden" name="action" value="review"><div class="field"><label for="comments">Comments</label><textarea class="input" id="comments" name="comments" rows="3" placeholder="Required when rejecting: what must change?"></textarea></div>
+  <div class="row"><button class="btn primary" name="outcome" value="accept">Accept</button><button class="btn danger" name="outcome" value="reject">Reject &amp; request revision</button></div></form></div>{% endif %}
+  <div class="card"><h2>Deliverables</h2>{% for a in artifacts %}<h3>{{ a.name }} <span class="muted small">{{ a.created_at }}</span></h3><pre>{{ a.content }}</pre>{% empty %}<div class="empty">No deliverable yet.</div>{% endfor %}</div>
+  <div class="card"><h2>Executions</h2>{% for ex in executions %}<details {% if forloop.first %}open{% endif %} style="margin-bottom:10px"><summary>Attempt {{ ex.attempt_number }} · <span class="badge {{ ex.status|badge }}">{{ ex.get_status_display }}</span> · {{ ex.model_used.display_name|default:"no model" }} · {{ ex.started_at|date:"Y-m-d H:i:s" }}</summary>
+  {% if ex.error %}<div class="messages"><li class="error">{{ ex.error }}</li></div>{% endif %}
+  <h3 style="margin-top:10px">Steps</h3><table class="table small"><tbody>{% for s in ex.steps %}<tr><td>{{ s.step }}</td><td>{{ s.model }}</td><td>{{ s.action }}{% if s.tool %}: <span class="mono">{{ s.tool }}</span> {% if s.allowed %}{% if s.success %}<span class="badge b-ok">ok</span>{% else %}<span class="badge b-bad">error</span>{% endif %}{% else %}<span class="badge b-bad">denied</span>{% endif %}{% endif %}{% if s.summary %} — {{ s.summary }}{% endif %}</td></tr>{% empty %}<tr><td class="muted">No steps recorded.</td></tr>{% endfor %}</tbody></table>
+  {% if ex.tool_calls.all %}<h3>Tool calls</h3>{% for c in ex.tool_calls.all %}<div class="small"><span class="mono">{{ c.tool_slug }}</span> {% if not c.allowed %}<span class="badge b-bad">denied: {{ c.denial_reason }}</span>{% endif %} {{ c.duration_ms }} ms</div><pre class="small">{{ c.output_summary|truncatechars:1500 }}</pre>{% endfor %}{% endif %}
+  <h3>Model routing</h3><pre class="small">{% for r in ex.routing_log %}{% if r.step %}step {{ r.step }}: {% endif %}{% for a in r.attempts %}{{ a.model }} → {{ a.outcome }}{% if a.detail %} ({{ a.detail }}){% endif %}
+{% endfor %}{% endfor %}</pre></details>{% empty %}<div class="empty">Not executed yet.</div>{% endfor %}</div>
+</div>
+<div class="stack">
+  <div class="card"><h2>Details</h2><dl class="kv">
+  <dt>Department</dt><dd><a href="{% url 'department_detail' task.department_id %}">{{ task.department.name }}</a></dd>
+  <dt>Assignee</dt><dd>{% if task.assigned_employee %}<a href="{% url 'employee_detail' task.assigned_employee_id %}">{{ task.assigned_employee.name }}</a>{% else %}engine will assign{% endif %}</dd>
+  <dt>Priority</dt><dd>{{ task.get_priority_display }}</dd><dt>Review</dt><dd>{% if task.requires_review %}required{% if task.reviewer %} by {{ task.reviewer.username }}{% endif %}{% else %}not required{% endif %}</dd>
+  <dt>Approval</dt><dd>{{ task.requires_approval|yesno:"required,not required" }}</dd><dt>Confidential</dt><dd>{{ task.is_confidential|yesno }}</dd>
+  <dt>Retries</dt><dd>{{ task.retry_count }} / {{ task.max_retries }}</dd><dt>Limits</dt><dd>{{ task.max_steps }} steps · {{ task.max_runtime_seconds }}s{% if task.max_cost_usd %} · ${{ task.max_cost_usd }}{% endif %}</dd>
+  <dt>Cost (estimated)</dt><dd>${{ task.actual_cost_usd|floatformat:6 }}</dd><dt>Last progress</dt><dd id="task-progress">{{ task.progress_note|default:"—" }}</dd>
+  <dt>Created</dt><dd>{{ task.created_at }} by {{ task.created_by.username|default:"system" }}</dd>{% if task.started_at %}<dt>Started</dt><dd>{{ task.started_at }}</dd>{% endif %}{% if task.completed_at %}<dt>Finished</dt><dd>{{ task.completed_at }}</dd>{% endif %}
+  </dl></div>
+  {% if can_manage and task.status != "completed" and task.status != "cancelled" %}<div class="card"><h2>Control</h2>
+  <form method="post" action="{% url 'task_action' task.pk %}" class="field">{% csrf_token %}<input type="hidden" name="action" value="priority"><label>Priority</label><div class="row"><select class="input" name="priority" style="width:auto">{% for v, l in priorities %}<option value="{{ v }}" {% if v == task.priority %}selected{% endif %}>{{ l }}</option>{% endfor %}</select><input class="input" name="reason" placeholder="Reason" style="width:140px"><button class="btn sm">Set</button></div></form>
+  {% if task.status != "running" %}<form method="post" action="{% url 'task_action' task.pk %}" class="field">{% csrf_token %}<input type="hidden" name="action" value="reassign"><label>Reassign</label><div class="row"><select class="input" name="employee" style="width:auto">{% for e in employees %}<option value="{{ e.pk }}" {% if e.pk == task.assigned_employee_id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}</select><button class="btn sm">Reassign</button></div></form>{% endif %}</div>{% endif %}
+  {% if dependencies %}<div class="card"><h2>Depends on</h2>{% for d in dependencies %}<div><a href="{% url 'task_detail' d.depends_on_id %}">{{ d.depends_on.code }} {{ d.depends_on.title|truncatechars:30 }}</a> <span class="badge {{ d.depends_on.status|badge }}">{{ d.depends_on.get_status_display }}</span></div>{% endfor %}</div>{% endif %}
+  {% if revisions %}<div class="card"><h2>Revisions</h2>{% for r in revisions %}<div><a href="{% url 'task_detail' r.pk %}">{{ r.code }}</a> <span class="badge {{ r.status|badge }}">{{ r.get_status_display }}</span></div>{% endfor %}</div>{% endif %}
+  {% if reviews %}<div class="card"><h2>Reviews</h2>{% for r in reviews %}<div><span class="badge {{ r.outcome|badge }}">{{ r.get_outcome_display }}</span> by {{ r.reviewer.username }} <span class="muted small">{{ r.created_at|timesince }} ago</span><div class="small">{{ r.comments }}</div></div>{% endfor %}</div>{% endif %}
+  {% if approvals %}<div class="card"><h2>Approvals</h2>{% for a in approvals %}<div><span class="badge {{ a.status|badge }}">{{ a.get_status_display }}</span> {{ a.get_kind_display }}{% if a.decided_by %} by {{ a.decided_by.username }}{% endif %}</div>{% endfor %}</div>{% endif %}
+  <div class="card"><h2>Model usage</h2>{% for u in usage %}<div class="small">{{ u.model.display_name }} — {% if u.success %}<span class="badge b-ok">ok</span>{% else %}<span class="badge b-bad">{{ u.error_kind }}</span>{% endif %}{% if u.was_fallback %} <span class="badge b-warn">fallback</span>{% endif %} {% if u.tokens_reported %}{{ u.input_tokens }}→{{ u.output_tokens }} tok{% endif %} · {{ u.latency_ms }} ms</div>{% empty %}<div class="muted small">No model calls.</div>{% endfor %}</div>
+  <div class="card"><h2>Status history</h2><ul class="timeline small">{% for h in history %}<li><strong>{{ h.to_status }}</strong> <span class="muted">from {{ h.from_status }} · {{ h.actor_label }} · {{ h.created_at|date:"H:i:s" }}</span>{% if h.reason %}<div>{{ h.reason }}</div>{% endif %}</li>{% empty %}<li class="muted">No changes yet.</li>{% endfor %}</ul></div>
+  {% if audit_events %}<div class="card"><h2>Audit trail</h2>{% for e in audit_events %}<div class="small mono">{{ e.created_at|date:"H:i:s" }} {{ e.action }} · {{ e.actor_label }}</div>{% endfor %}</div>{% endif %}
+</div></div>
+{% endblock %}
+{% block scripts %}{% if task.status == "running" or task.status == "queued" %}<script>setTimeout(() => location.reload(), 4000);</script>{% endif %}{% endblock %}

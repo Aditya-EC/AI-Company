@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Notifications</h1></div><form method="post">{% csrf_token %}<button class="btn">Mark all read</button></form></div>
+<div class="card">{% for n in page %}<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div class="row">{% if not n.is_read %}<span class="badge b-info">new</span>{% endif %}<strong>{{ n.title }}</strong><span class="muted small">{{ n.created_at|timesince }} ago</span></div>{% if n.body %}<div class="small muted">{{ n.body|truncatechars:300 }}</div>{% endif %}{% if n.link %}<a class="small" href="{{ n.link }}">Open</a>{% endif %}</div>
+{% empty %}<div class="empty">No notifications.</div>{% endfor %}{% include "partials/pagination.html" %}</div>
+{% endblock %}

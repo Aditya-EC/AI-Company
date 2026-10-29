@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}{{ provider.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ provider.name }}</h1><div class="muted">{{ provider.get_kind_display }} · <span class="mono">{{ provider.base_url }}</span></div></div>
+{% if manage %}<form method="post" class="row">{% csrf_token %}<button class="btn" name="action" value="health">Run health check</button>{% if provider.kind == "ollama" %}<button class="btn" name="action" value="discover">Discover local models</button>{% endif %}{% if provider.circuit_open or provider.consecutive_failures %}<button class="btn" name="action" value="reset_circuit">Reset circuit breaker</button>{% endif %}</form>{% endif %}</div>
+<div class="grid g3">
+<div class="card"><h2>Status</h2><dl class="kv">
+<dt>Health</dt><dd><span class="badge {{ provider.health_status|badge }}">{{ provider.get_health_status_display }}</span></dd>
+<dt>Last check</dt><dd>{{ provider.last_health_check|default:"never" }}</dd><dt>Last error</dt><dd class="small">{{ provider.last_error|default:"—" }}</dd>
+<dt>Consecutive failures</dt><dd>{{ provider.consecutive_failures }}</dd><dt>Circuit</dt><dd>{% if provider.circuit_open %}<span class="badge b-bad">open until {{ provider.circuit_open_until|time }}</span>{% else %}closed{% endif %}</dd>
+<dt>Credential</dt><dd>{% if provider.credential_ref %}<span class="mono">{{ provider.credential_ref }}</span>{% elif provider.encrypted_api_key %}encrypted key stored{% else %}none{% endif %}</dd>
+<dt>Classification</dt><dd>{% if provider.is_local %}local{% else %}cloud{% endif %}{% if provider.is_paid %}, paid{% endif %}{% if provider.allow_confidential_data %}, confidential data allowed{% endif %}</dd></dl>
+{% if discovered is not None %}<h3 style="margin-top:14px">Installed on Ollama</h3>{% for name in discovered %}<div class="mono small">{{ name }}</div>{% empty %}<div class="muted small">No local models installed. Run <code>ollama pull &lt;model&gt;</code> on the host.</div>{% endfor %}{% endif %}</div>
+<div class="card span2 table-wrap"><h2>Models</h2><table class="table"><thead><tr><th>Model</th><th>Capabilities</th><th>Quota/day</th><th>Approved</th><th>Enabled</th></tr></thead><tbody>
+{% for m in models %}<tr><td><a href="{% url 'model_detail' m.pk %}">{{ m.display_name }}</a> <span class="mono small muted">{{ m.model_identifier }}</span></td><td class="small">{{ m.capabilities|join:", " }}</td><td>{{ m.daily_request_quota|default:"—" }}</td>
+<td>{% if manage %}<form method="post">{% csrf_token %}<input type="hidden" name="model" value="{{ m.pk }}"><input type="hidden" name="field" value="is_approved"><button class="btn sm" name="action" value="toggle_model">{% if m.is_approved %}Approved ✓{% else %}Approve{% endif %}</button></form>{% else %}{{ m.is_approved|yesno }}{% endif %}</td>
+<td>{% if manage %}<form method="post">{% csrf_token %}<input type="hidden" name="model" value="{{ m.pk }}"><input type="hidden" name="field" value="is_enabled"><button class="btn sm" name="action" value="toggle_model">{% if m.is_enabled %}Enabled ✓{% else %}Enable{% endif %}</button></form>{% else %}{{ m.is_enabled|yesno }}{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5"><div class="empty">No models for this provider.</div></td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% if manage %}<div class="grid g2" style="margin-top:16px">
+<div class="card"><h2>Add model</h2><p class="muted small">Declare only capabilities you have verified for this model; the router relies on them.</p><form method="post">{% csrf_token %}<input type="hidden" name="action" value="add_model">{% include "partials/form_fields.html" with form=mform %}<button class="btn primary">Add model</button></form></div>
+<div class="card"><h2>Provider settings</h2><form method="post">{% csrf_token %}<input type="hidden" name="action" value="save">{% include "partials/form_fields.html" %}<button class="btn primary">Save provider</button></form></div></div>{% endif %}
+<div class="card table-wrap" style="margin-top:16px"><h2>Recent usage</h2><table class="table"><thead><tr><th>When</th><th>Model</th><th>Employee</th><th>Result</th><th>Tokens in/out</th><th>Latency</th><th>Est. cost</th></tr></thead><tbody>
+{% for u in usage %}<tr><td>{{ u.created_at|timesince }} ago</td><td>{{ u.model.display_name }}</td><td>{{ u.employee.name }}</td><td>{% if u.success %}<span class="badge b-ok">ok</span>{% else %}<span class="badge b-bad">{{ u.error_kind }}</span>{% endif %}{% if u.was_fallback %} <span class="badge b-warn">fallback</span>{% endif %}</td><td>{% if u.tokens_reported %}{{ u.input_tokens }}/{{ u.output_tokens }}{% else %}<span class="muted">not reported</span>{% endif %}</td><td>{{ u.latency_ms }} ms</td><td>${{ u.estimated_cost_usd|floatformat:6 }}</td></tr>
+{% empty %}<tr><td colspan="7"><div class="empty">No calls yet.</div></td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

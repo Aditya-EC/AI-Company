@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}{{ emp.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div class="row"><div class="avatar" style="width:auto;pointer-events:none"><div class="face st-idle" style="background:{{ emp.avatar_color }}">{{ emp.name|initials }}</div></div><div><h1>{{ emp.name }}</h1><div class="muted"><span class="mono">{{ emp.employee_id }}</span> · {{ emp.job_title }} · <a href="{% url 'department_detail' emp.department_id %}">{{ emp.department.name }}</a> · <span class="badge {{ emp.status|badge }}">{{ emp.get_status_display }}</span></div></div></div>
+<form method="post" class="row">{% csrf_token %}
+{% if emp.status == "active" %}<button class="btn" name="action" value="pause">Pause</button>{% elif emp.status == "paused" or emp.status == "suspended" %}<button class="btn" name="action" value="resume">Resume</button>{% endif %}
+{% if manage and emp.status != "suspended" %}<button class="btn danger" name="action" value="suspend" data-confirm="Suspend {{ emp.name }}? History is preserved.">Suspend</button>{% endif %}</form></div>
+
+<div class="grid g4" style="margin-bottom:16px">
+<div class="card stat"><div class="label">Completed</div><div class="value">{{ metrics.completed }}</div></div>
+<div class="card stat"><div class="label">Review outcome</div><div class="value">{{ metrics.accepted }} / {{ metrics.rejected }}</div><div class="sub">accepted / rejected (rework)</div></div>
+<div class="card stat"><div class="label">Failed</div><div class="value">{{ metrics.failed }}</div></div>
+<div class="card stat"><div class="label">Model calls</div><div class="value">{{ metrics.calls }}</div><div class="sub">est. ${{ metrics.cost|floatformat:4 }}</div></div>
+</div>
+
+<div class="tabs" data-tabs="emp"><button class="active" data-tab="models">Model priority</button><button data-tab="tools">Tools</button><button data-tab="tasks">Task history</button>{% if form %}<button data-tab="profile">Profile &amp; instructions</button>{% endif %}</div>
+
+<div class="tab-panel" data-tab-panel="emp" data-name="models"><div class="grid g3"><div class="card span2"><h2>Ordered model list</h2>
+<p class="muted small">The gateway tries these in order, skipping models that lack required capabilities, are unhealthy, over quota, or are paid without explicit permission and budget.</p>
+<table class="table"><thead><tr><th>#</th><th>Model</th><th>Provider</th><th>Type</th><th>Capabilities</th>{% if manage %}<th></th>{% endif %}</tr></thead><tbody>
+{% for p in policies %}<tr><td>{{ p.priority }}</td><td><a href="{% url 'model_detail' p.model_id %}">{{ p.model.display_name }}</a>{% if not p.model.is_approved %} <span class="badge b-warn">not approved</span>{% endif %}</td><td>{{ p.model.provider.name }} <span class="badge {{ p.model.provider.health_status|badge }}">{{ p.model.provider.get_health_status_display }}</span></td>
+<td>{% if p.model.provider.is_local %}<span class="badge b-ok">local</span>{% else %}cloud{% endif %} {% if p.model.is_paid %}<span class="badge b-warn">paid{% if p.allow_paid %} · allowed{% endif %}</span>{% endif %}</td><td class="small">{{ p.model.capabilities|join:", " }}</td>
+{% if manage %}<td><form method="post" class="row">{% csrf_token %}<input type="hidden" name="policy" value="{{ p.pk }}"><button class="btn sm" name="action" value="model_up" {% if forloop.first %}disabled{% endif %} aria-label="Move up">↑</button><button class="btn sm" name="action" value="model_down" {% if forloop.last %}disabled{% endif %} aria-label="Move down">↓</button><button class="btn sm danger" name="action" value="model_remove">Remove</button></form></td>{% endif %}</tr>
+{% empty %}<tr><td colspan="6"><div class="empty">No models configured — this employee cannot run tasks.</div></td></tr>{% endfor %}</tbody></table></div>
+{% if manage %}<div class="card"><h2>Add model</h2><form method="post">{% csrf_token %}<input type="hidden" name="action" value="add_model"><div class="field"><select class="input" name="model" required>{% for m in available_models %}<option value="{{ m.pk }}">{{ m.display_name }} — {{ m.provider.name }}{% if not m.is_approved %} (not approved){% endif %}</option>{% empty %}<option value="">No models — add one under AI models</option>{% endfor %}</select></div>
+<div class="field checkbox"><input type="checkbox" class="check" name="allow_paid" id="allow_paid"><label for="allow_paid">Allow if paid (still needs Founder enablement and budget)</label></div><button class="btn primary">Add to priority list</button></form></div>{% endif %}</div></div>
+
+<div class="tab-panel" data-tab-panel="emp" data-name="tools" hidden><div class="grid g3"><div class="card span2"><h2>Employee-level tool grants</h2><p class="muted small">Effective access also includes company, department, project and task grants; any explicit deny wins. Default is deny.</p>
+<table class="table"><tbody>{% for g in tool_grants %}<tr><td class="mono">{{ g.tool.slug }}</td><td><span class="badge {% if g.allow %}b-ok{% else %}b-bad{% endif %}">{% if g.allow %}allow{% else %}deny{% endif %}</span></td><td>{% if perm.manage_tools %}<form method="post">{% csrf_token %}<input type="hidden" name="grant" value="{{ g.pk }}"><button class="btn sm" name="action" value="revoke_tool">Revoke</button></form>{% endif %}</td></tr>{% empty %}<tr><td><div class="empty">No employee-level grants.</div></td></tr>{% endfor %}</tbody></table></div>
+{% if perm.manage_tools %}<div class="card"><h2>Grant or deny tool</h2><form method="post">{% csrf_token %}<div class="field"><select class="input" name="tool">{% for t in tools %}<option value="{{ t.pk }}">{{ t.slug }} ({{ t.get_risk_level_display }} risk)</option>{% endfor %}</select></div><div class="row"><button class="btn primary" name="action" value="grant_tool">Grant</button><button class="btn danger" name="action" value="deny_tool">Deny</button></div></form></div>{% endif %}</div></div>
+
+<div class="tab-panel" data-tab-panel="emp" data-name="tasks" hidden><div class="card table-wrap"><table class="table"><thead><tr><th>Task</th><th>Status</th><th>Updated</th><th>Cost (est.)</th></tr></thead><tbody>
+{% for t in tasks %}<tr><td><a href="{% url 'task_detail' t.pk %}">{{ t.code }} {{ t.title }}</a></td><td><span class="badge {{ t.status|badge }}">{{ t.get_status_display }}</span></td><td>{{ t.updated_at|timesince }} ago</td><td>${{ t.actual_cost_usd|floatformat:4 }}</td></tr>{% empty %}<tr><td colspan="4"><div class="empty">No tasks yet.</div></td></tr>{% endfor %}</tbody></table></div></div>
+
+{% if form %}<div class="tab-panel" data-tab-panel="emp" data-name="profile" hidden><div class="card"><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary" name="action" value="save">Save profile</button></form></div></div>{% endif %}
+{% endblock %}

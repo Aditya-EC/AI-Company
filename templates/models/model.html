@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}{{ model.display_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ model.display_name }}</h1><div class="muted"><span class="mono">{{ model.model_identifier }}</span> · <a href="{% url 'provider_detail' model.provider_id %}">{{ model.provider.name }}</a></div></div></div>
+<div class="grid g3"><div class="card"><h2>Used by</h2>{% for p in employees %}<div>#{{ p.priority }} <a href="{% url 'employee_detail' p.employee_id %}">{{ p.employee.name }}</a></div>{% empty %}<div class="muted">No employees.</div>{% endfor %}</div>
+{% if form %}<div class="card span2"><h2>Configuration</h2><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Save</button></form></div>{% endif %}</div>
+{% endblock %}

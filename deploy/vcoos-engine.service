@@ -1,0 +1,22 @@
+[Unit]
+Description=VCoOS orchestration engine worker
+After=network.target postgresql.service redis.service
+
+[Service]
+User=vcoos
+Group=vcoos
+WorkingDirectory=/opt/vcoos
+EnvironmentFile=/etc/vcoos/vcoos.env
+ExecStart=/opt/vcoos/.venv/bin/python manage.py run_engine --interval 2
+# SIGTERM lets running tasks reach a safe checkpoint; leases recover anything interrupted.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+Restart=always
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/vcoos
+
+[Install]
+WantedBy=multi-user.target

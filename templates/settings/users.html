@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Users &amp; permissions{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Users &amp; permissions</h1><div class="muted">Staff accounts receive no access until permissions are granted. Grants can be scoped to a department or project.</div></div></div>
+<div class="grid g3"><div class="card span2 table-wrap"><h2>Accounts</h2><table class="table"><thead><tr><th>User</th><th>Type</th><th>Department</th><th>Status</th><th></th></tr></thead><tbody>
+{% for u in users %}<tr><td>{{ u.username }}<div class="muted small">{{ u.email }}</div></td><td>{{ u.get_account_type_display }}</td><td>{{ u.department.name|default:"—" }}</td><td>{% if u.is_active %}<span class="badge b-ok">active</span>{% else %}<span class="badge">inactive</span>{% endif %}</td>
+<td>{% if not u.is_founder %}<form method="post">{% csrf_token %}<input type="hidden" name="user" value="{{ u.pk }}">{% if u.is_active %}<button class="btn sm danger" name="action" value="deactivate">Deactivate</button>{% else %}<button class="btn sm" name="action" value="activate">Activate</button>{% endif %}</form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+<h2 style="margin-top:20px">Permission grants</h2><table class="table"><thead><tr><th>User</th><th>Permission</th><th>Scope</th><th></th></tr></thead><tbody>
+{% for a in assignments %}<tr><td>{{ a.user.username }}</td><td>{{ a.get_permission_display }}</td><td>{% if a.project %}Project: {{ a.project.name }}{% elif a.department %}Dept: {{ a.department.name }}{% else %}Company-wide{% endif %}</td><td><form method="post">{% csrf_token %}<input type="hidden" name="assignment" value="{{ a.pk }}"><button class="btn sm" name="action" value="revoke">Revoke</button></form></td></tr>
+{% empty %}<tr><td colspan="4"><div class="empty">No grants.</div></td></tr>{% endfor %}</tbody></table></div>
+<div class="stack"><div class="card"><h2>New account</h2><form method="post">{% csrf_token %}<input type="hidden" name="action" value="create_user">{% include "partials/form_fields.html" with form=uform %}<button class="btn primary">Create account</button></form></div>
+<div class="card"><h2>Grant permission</h2><form method="post">{% csrf_token %}<input type="hidden" name="action" value="grant">{% include "partials/form_fields.html" with form=pform %}<button class="btn primary">Grant</button></form></div></div></div>
+{% endblock %}

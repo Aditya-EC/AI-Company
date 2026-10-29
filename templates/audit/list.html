@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block title %}Audit log{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Audit log</h1><div class="muted">Append-only and hash-chained: any edit, deletion or reordering breaks verification.</div></div>
+<a class="btn" href="?verify=1">Verify chain integrity</a></div>
+{% if verified %}{% if verified.0 %}<ul class="messages"><li class="success">Chain verified: no tampering detected.</li></ul>{% else %}<ul class="messages"><li class="error">Chain BROKEN at event #{{ verified.1 }} — investigate immediately.</li></ul>{% endif %}{% endif %}
+<form class="row card" method="get" style="margin-bottom:16px"><input class="input" name="action" value="{{ request.GET.action }}" placeholder="Action (e.g. task.status)" style="max-width:220px"><input class="input" name="actor" value="{{ request.GET.actor }}" placeholder="Actor" style="max-width:200px"><input class="input" name="target_type" value="{{ request.GET.target_type }}" placeholder="Target type" style="max-width:200px"><button class="btn">Filter</button></form>
+<div class="card table-wrap"><table class="table"><thead><tr><th>#</th><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>Hash</th></tr></thead><tbody>
+{% for e in page %}<tr><td>{{ e.id }}</td><td class="small">{{ e.created_at|date:"Y-m-d H:i:s" }}</td><td class="small">{{ e.actor_label }}</td><td class="mono small">{{ e.action }}</td><td class="small">{{ e.target_type }}{% if e.target_id %} #{{ e.target_id }}{% endif %}</td><td class="small mono" style="max-width:320px;overflow-wrap:anywhere">{{ e.details }}</td><td class="mono small muted">{{ e.hash|slice:":10" }}…</td></tr>
+{% empty %}<tr><td colspan="7"><div class="empty">No events.</div></td></tr>{% endfor %}</tbody></table>{% include "partials/pagination.html" %}</div>
+{% endblock %}

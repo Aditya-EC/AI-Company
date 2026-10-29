@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Tasks{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Task board</h1><div class="muted">Every card reflects persisted engine state.</div></div>
+<div class="row"><form method="get" class="row"><input class="input" name="q" value="{{ request.GET.q }}" placeholder="Search tasks" style="width:220px"><button class="btn">Search</button></form>{% if can_create %}<a class="btn primary" href="{% url 'task_create' %}">New task</a>{% endif %}</div></div>
+<div class="board">{% for name, tasks in columns %}<div class="col"><h3>{{ name }} <span class="muted">{{ tasks|length }}</span></h3>
+{% for t in tasks %}<a class="tcard" href="{% url 'task_detail' t.pk %}"><div class="row" style="justify-content:space-between"><span class="mono small muted">{{ t.code }}</span><span class="badge {{ t.status|badge }}">{{ t.get_status_display }}</span></div><div class="t">{{ t.title|truncatechars:70 }}</div>
+<div class="small muted">{{ t.assigned_employee.name|default:"Unassigned" }} · {{ t.get_priority_display }}</div>{% if t.progress_note and t.status == "running" %}<div class="small">{{ t.progress_note }}</div>{% endif %}</a>
+{% empty %}<div class="muted small" style="padding:8px">Empty</div>{% endfor %}</div>{% endfor %}</div>
+{% endblock %}

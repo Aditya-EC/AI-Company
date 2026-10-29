@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Company dashboard</h1><div class="muted">Live state from the orchestration engine. Figures cover the last 30 days unless noted.</div></div>
+<div class="row">{% if perm.manage_tasks %}<a class="btn primary" href="{% url 'task_create' %}">New task</a>{% endif %}<a class="btn" href="{% url 'office' %}">Open virtual office</a></div></div>
+
+<div class="grid g4">
+  <div class="card stat"><div class="label">AI employees</div><div class="value">{{ employee_total }}</div>
+    <div class="sub">{% for s, n in employee_states.items %}<span class="state st-{{ s }}">{{ n }} {{ s|state_label }}</span>&nbsp; {% empty %}none yet{% endfor %}</div></div>
+  <div class="card stat"><div class="label">Running tasks</div><div class="value">{{ task_counts.running|default:0 }}</div><div class="sub">{{ task_counts.queued|default:0 }} queued · {{ task_counts.blocked|default:0 }} blocked</div></div>
+  <div class="card stat"><div class="label">Completion rate (30d)</div><div class="value">{% if completion_rate is not None %}{{ completion_rate }}%{% else %}—{% endif %}</div><div class="sub">{{ done_30d }} completed · {{ failed_30d }} failed</div></div>
+  <div class="card stat"><div class="label">AI usage (30d)</div><div class="value">{{ usage_calls }}</div><div class="sub">calls · {{ usage_failures }} failed · {{ usage_fallbacks }} via fallback · est. ${{ usage_cost|floatformat:4 }}</div></div>
+</div>
+
+<div class="grid g3" style="margin-top:16px">
+  <div class="card"><h2>Running now</h2>
+    {% for t in running %}<div class="row" style="justify-content:space-between"><a href="{% url 'task_detail' t.pk %}">{{ t.code }} {{ t.title|truncatechars:40 }}</a><span class="muted small">{{ t.assigned_employee.name }}</span></div><div class="muted small">{{ t.progress_note|default:"no progress reported yet" }}</div>
+    {% empty %}<div class="empty">Nothing running.</div>{% endfor %}</div>
+  <div class="card"><h2>Awaiting review</h2>
+    {% for t in under_review %}<div class="row" style="justify-content:space-between"><a href="{% url 'task_detail' t.pk %}">{{ t.code }} {{ t.title|truncatechars:40 }}</a><span class="muted small">{{ t.assigned_employee.name }}</span></div>
+    {% empty %}<div class="empty">No deliverables waiting.</div>{% endfor %}
+    {% if approvals is not None %}<p style="margin-top:12px"><a href="{% url 'approvals' %}">{{ approvals }} pending approval{{ approvals|pluralize }}</a></p>{% endif %}</div>
+  <div class="card"><h2>Blockers &amp; failures</h2>
+    {% for t in blockers %}<div><span class="badge {{ t.status|badge }}">{{ t.get_status_display }}</span> <a href="{% url 'task_detail' t.pk %}">{{ t.code }} {{ t.title|truncatechars:34 }}</a><div class="muted small">{{ t.status_reason|truncatechars:90 }}</div></div>
+    {% empty %}<div class="empty">No blockers.</div>{% endfor %}</div>
+</div>
+
+<div class="grid g3" style="margin-top:16px">
+  {% if providers %}<div class="card"><h2>Provider health</h2><table class="table"><tbody>
+    {% for p in providers %}<tr><td><a href="{% url 'provider_detail' p.pk %}">{{ p.name }}</a> <span class="muted small">{{ p.get_kind_display }}</span></td><td><span class="badge {{ p.health_status|badge }}">{{ p.get_health_status_display }}</span>{% if p.circuit_open %} <span class="badge b-bad">circuit open</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% endif %}
+  <div class="card"><h2>Budget</h2>
+    {% for b, spent in budgets %}<div class="small">{{ b }} — ${{ spent|floatformat:4 }} used ({{ spent|pct:b.limit_usd }}%)</div><div style="height:6px;background:var(--muted-bg);border-radius:4px;margin:4px 0 10px"><div style="height:6px;width:{{ spent|pct:b.limit_usd }}%;background:var(--accent);border-radius:4px"></div></div>
+    {% empty %}<div class="muted small">No company budget configured. Paid models are {% if company.paid_models_enabled %}enabled{% else %}disabled{% endif %}; without a budget, paid calls are denied.</div>{% endfor %}
+    <div class="muted small">Costs are estimates unless verified billing data is recorded.</div></div>
+  {% if recent_events %}<div class="card"><h2>Recent decisions &amp; events</h2><ul class="timeline small">
+    {% for e in recent_events %}<li><span class="mono">{{ e.action }}</span> <span class="muted">by {{ e.actor_label }} · {{ e.created_at|timesince }} ago</span></li>{% endfor %}</ul></div>{% endif %}
+</div>
+{% if incidents %}<div class="card" style="margin-top:16px"><h2>Open incidents</h2>{% for i in incidents %}<div><span class="badge b-bad">{{ i.get_severity_display }}</span> {{ i.title }} <span class="muted small">{{ i.created_at|timesince }} ago</span></div>{% endfor %}</div>{% endif %}
+{% endblock %}

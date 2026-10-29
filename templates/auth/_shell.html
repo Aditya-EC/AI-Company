@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block auth %}<div class="auth-wrap"><div class="card auth-card">
+<div class="brand"><div class="brand-mark">VC</div><div>VCoOS<small>AI Virtual Company OS</small></div></div>
+{% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+{% block card %}{% endblock %}
+</div></div>{% endblock %}

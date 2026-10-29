@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}AI models{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>AI model gateway</h1><div class="muted">All employees reach models only through this gateway. Credentials never leave the server.</div></div></div>
+<div class="grid {% if form %}g3{% endif %}"><div class="{% if form %}span2{% endif %} stack">
+<div class="card table-wrap"><h2>Providers</h2><table class="table"><thead><tr><th>Provider</th><th>Health</th><th>Type</th><th>Models</th><th>Calls</th><th>Failures</th><th>Avg latency</th></tr></thead><tbody>
+{% for p in providers %}<tr><td><a href="{% url 'provider_detail' p.pk %}">{{ p.name }}</a><div class="muted small">{{ p.get_kind_display }}</div></td><td><span class="badge {{ p.health_status|badge }}">{{ p.get_health_status_display }}</span>{% if p.circuit_open %} <span class="badge b-bad">circuit open</span>{% endif %}{% if not p.is_enabled %} <span class="badge">disabled</span>{% endif %}</td>
+<td>{% if p.is_local %}<span class="badge b-ok">local</span>{% else %}cloud{% endif %}{% if p.is_paid %} <span class="badge b-warn">paid</span>{% endif %}</td><td>{{ p.n_models }}</td><td>{{ p.calls }}</td><td>{{ p.failures }}</td><td>{% if p.latency %}{{ p.latency|floatformat:0 }} ms{% else %}—{% endif %}</td></tr>
+{% empty %}<tr><td colspan="7"><div class="empty">No providers configured. Add a local Ollama provider to start.</div></td></tr>{% endfor %}</tbody></table></div>
+<div class="card table-wrap"><h2>Models</h2><table class="table"><thead><tr><th>Model</th><th>Provider</th><th>Capabilities</th><th>Price / Mtok (in/out)</th><th>Status</th><th>Employees</th></tr></thead><tbody>
+{% for m in models %}<tr><td><a href="{% url 'model_detail' m.pk %}">{{ m.display_name }}</a><div class="mono small muted">{{ m.model_identifier }}</div></td><td>{{ m.provider.name }}</td><td class="small">{{ m.capabilities|join:", " }}{% if not m.capabilities_verified_at %} <span class="muted">(declared)</span>{% endif %}</td><td class="small">${{ m.price_input_per_mtok }} / ${{ m.price_output_per_mtok }}</td>
+<td>{% if m.is_approved %}<span class="badge b-ok">approved</span>{% else %}<span class="badge b-warn">not approved</span>{% endif %}{% if not m.is_enabled %} <span class="badge">disabled</span>{% endif %}</td><td>{{ m.n_employees }}</td></tr>
+{% empty %}<tr><td colspan="6"><div class="empty">No models yet. Open a provider to add models.</div></td></tr>{% endfor %}</tbody></table></div></div>
+{% if form %}<div class="card"><h2>Add provider</h2><p class="muted small">Consumer chat subscriptions do not include API access; use API credentials and respect each provider's terms.</p>
+<form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Add provider</button></form>
+<details class="small" style="margin-top:12px"><summary>Default endpoints</summary><dl class="kv">{% for k, v in default_urls.items %}<dt>{{ k }}</dt><dd class="mono">{{ v }}</dd>{% endfor %}</dl></details></div>{% endif %}
+</div>{% endblock %}

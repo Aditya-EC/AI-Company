@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Employees{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Employee directory</h1><div class="muted">AI employees are configurations run by the shared orchestration engine.</div></div>
+<div class="row"><a class="btn" href="{% url 'role_templates' %}">Role templates</a>{% if perm.manage_employees %}<a class="btn primary" href="{% url 'employee_create' %}">New employee</a>{% endif %}</div></div>
+<form class="row card" style="margin-bottom:16px" method="get"><input class="input" style="max-width:280px" name="q" value="{{ q }}" placeholder="Search name, title or ID">
+<select class="input" style="max-width:240px" name="department"><option value="">All departments</option>{% for d in departments %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select><button class="btn">Filter</button></form>
+<div class="card table-wrap"><table class="table"><thead><tr><th>Employee</th><th>Title</th><th>Department</th><th>Live state</th><th>Current task</th><th>Primary model</th></tr></thead><tbody>
+{% for e, state, task in rows %}<tr><td><a href="{% url 'employee_detail' e.pk %}">{{ e.name }}</a><div class="muted small mono">{{ e.employee_id }}</div></td><td>{{ e.job_title }}</td><td>{{ e.department.name }}</td>
+<td><span class="state st-{{ state }}">{{ state|state_label }}</span></td><td>{% if task %}<a href="{% url 'task_detail' task.pk %}">{{ task.code }}</a> <span class="muted small">{{ task.title|truncatechars:30 }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+<td>{% with p=e.model_policies.all|first %}{% if p %}{{ p.model.display_name }}{% else %}<span class="badge b-warn">none configured</span>{% endif %}{% endwith %}</td></tr>
+{% empty %}<tr><td colspan="6"><div class="empty">No employees found.</div></td></tr>{% endfor %}</tbody></table>{% include "partials/pagination.html" %}</div>
+{% endblock %}

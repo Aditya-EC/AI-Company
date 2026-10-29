@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}New task{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>New task</h1><div class="muted">Write clear acceptance criteria: reviewers check deliverables against them.</div></div></div>
+<div class="card"><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}
+<div class="row"><button class="btn primary" name="submit" value="queue">Create &amp; submit to engine</button><button class="btn" name="submit" value="draft">Save as draft</button></div></form></div>
+{% endblock %}

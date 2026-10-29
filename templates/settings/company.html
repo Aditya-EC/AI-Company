@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}Company settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Company settings</h1><div class="muted">Founder-exclusive configuration.</div></div></div>
+<div class="grid g3"><div class="card span2"><h2>Strategy &amp; operations</h2><form method="post">{% csrf_token %}<input type="hidden" name="action" value="save">{% include "partials/form_fields.html" %}<button class="btn primary">Save settings</button></form></div>
+<div class="stack">
+<div class="card" style="border-color:var(--bad)"><h2>Emergency stop</h2><p class="small muted">Halts new agent execution and all tool use. Running tasks pause at their next safe checkpoint. History and audit records are kept.</p>
+<form method="post">{% csrf_token %}{% if company.emergency_stop %}<p><span class="badge b-bad">ACTIVE</span> {{ company.emergency_stop_reason }}</p><button class="btn" name="action" value="unstop" data-confirm="Lift the emergency stop and allow agents to resume?">Lift emergency stop</button>
+{% else %}<div class="field"><input class="input" name="reason" placeholder="Reason (recorded in audit log)" required></div><button class="btn danger solid" name="action" value="stop" data-confirm="Activate the emergency stop for the whole company?">Activate emergency stop</button>{% endif %}</form></div>
+<div class="card"><h2>Paid model usage</h2><p class="small muted">Disabled by default. Even when enabled, a paid model runs only for employees explicitly allowed to use it and only within a configured budget.</p>
+<form method="post">{% csrf_token %}{% if company.paid_models_enabled %}<p><span class="badge b-warn">Enabled</span></p><button class="btn" name="action" value="disable_paid">Disable paid models</button>{% else %}<p><span class="badge b-ok">Disabled</span></p><button class="btn" name="action" value="enable_paid" data-confirm="Enable paid model usage? Budgets still apply.">Enable paid models</button>{% endif %}</form>
+<p class="small"><a href="{% url 'budgets' %}">Configure budgets</a></p></div></div></div>
+{% endblock %}
