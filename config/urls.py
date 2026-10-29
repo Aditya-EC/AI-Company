@@ -13,8 +13,7 @@ from apps.work import views as work
 auth = [
     path("accounts/login/", core.RateLimitedLoginView.as_view(), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
-    path("accounts/password-reset/", auth_views.PasswordResetView.as_view(template_name="auth/password_reset.html",
-         email_template_name="auth/password_reset_email.txt"), name="password_reset"),
+    path("accounts/password-reset/", core.RateLimitedPasswordResetView.as_view(), name="password_reset"),
     path("accounts/password-reset/done/", auth_views.PasswordResetDoneView.as_view(template_name="auth/password_reset_done.html"),
          name="password_reset_done"),
     path("accounts/reset/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(template_name="auth/password_reset_confirm.html"),
@@ -28,6 +27,8 @@ auth = [
 urlpatterns = auth + [
     path("", core.dashboard, name="dashboard"),
     path("healthz", core.healthz, name="healthz"),
+    path("healthz/ready", core.healthz_ready, name="healthz_ready"),
+    path("metrics", core.metrics, name="metrics"),
     path("office/", office.office, name="office"),
     path("monitor/", office.monitor, name="monitor"),
     path("api/office/state/", office.api_office_state, name="api_office_state"),

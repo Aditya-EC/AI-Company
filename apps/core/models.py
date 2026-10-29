@@ -4,6 +4,7 @@ import json
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -45,6 +46,9 @@ class CompanySettings(models.Model):
     repository_conventions = models.TextField(blank=True)
     ceo_approval_limit_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0,
                                                  help_text="CEO may approve proposals up to this estimated cost; above needs the Founder.")
+    retention_notifications_days = models.PositiveIntegerField(default=90, help_text="Read notifications older than this are deleted.")
+    retention_exports_days = models.PositiveIntegerField(default=30, help_text="Report export files older than this are deleted.")
+    retention_workspaces_days = models.PositiveIntegerField(default=30, help_text="Workspaces of finished non-repository tasks are removed after this.")
     email_notifications_enabled = models.BooleanField(default=False, help_text="Founder-approved: allow email delivery of notifications.")
     web_allowed_domains = models.JSONField(default=list, blank=True, help_text="If set, web.fetch is limited to these domains.")
     emergency_stop = models.BooleanField(default=False, help_text="Halts all new agent execution and tool use.")
@@ -72,6 +76,9 @@ class CompanySettings(models.Model):
         return obj
 
 
+HEX_COLOR = RegexValidator(r"^#[0-9a-fA-F]{6}$", "Use a hex colour like #4f7cff.")
+
+
 class Department(models.Model):
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=120, unique=True)
@@ -84,7 +91,7 @@ class Department(models.Model):
     office_floor = models.PositiveIntegerField(default=0)
     office_x = models.IntegerField(default=0)
     office_z = models.IntegerField(default=0)
-    color = models.CharField(max_length=7, default="#4f7cff")
+    color = models.CharField(max_length=7, default="#4f7cff", validators=[HEX_COLOR])
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -123,7 +130,7 @@ class EmployeeProfile(models.Model):
 
     employee_id = models.CharField(max_length=20, unique=True, editable=False)
     name = models.CharField(max_length=120)
-    avatar_color = models.CharField(max_length=7, default="#22c55e")
+    avatar_color = models.CharField(max_length=7, default="#22c55e", validators=[HEX_COLOR])
     job_title = models.CharField(max_length=120)
     department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="employees")
     role_template = models.ForeignKey(RoleTemplate, null=True, blank=True, on_delete=models.SET_NULL, related_name="employees")

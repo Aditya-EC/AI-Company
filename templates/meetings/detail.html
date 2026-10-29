@@ -18,4 +18,4 @@
 <dl class="kv small" style="margin-top:10px"><dt>Round limit</dt><dd>{{ m.max_rounds }}</dd><dt>Model calls</dt><dd>{{ m.model_calls }}</dd>{% if m.project %}<dt>Project</dt><dd><a href="{% url 'project_detail' m.project_id %}">{{ m.project.name }}</a></dd>{% endif %}</dl>
 {% if m.notes_document %}<p class="small"><a href="{% url 'knowledge_detail' m.notes_document_id %}">Meeting notes in knowledge base</a></p>{% endif %}</div></div></div>
 {% endblock %}
-{% block scripts %}{% if m.status == "running" or m.status == "queued" %}<script>setTimeout(() => location.reload(), 4000);</script>{% endif %}{% endblock %}
+{% block scripts %}{% if m.status == "running" or m.status == "queued" %}<script nonce="{{ request.csp_nonce }}">setTimeout(() => location.reload(), 4000);</script>{% endif %}{% endblock %}

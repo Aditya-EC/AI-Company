@@ -1,6 +1,8 @@
 // Theme toggle, tabs and confirmation dialogs (no secrets or privileged config live client-side).
 (function () {
   const root = document.documentElement;
+  const menu = document.getElementById("menu-toggle");
+  if (menu) menu.addEventListener("click", () => document.getElementById("sidebar").classList.toggle("open"));
   const btn = document.getElementById("theme-toggle");
   if (btn) btn.addEventListener("click", () => {
     const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;

@@ -11,6 +11,9 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from django.conf import settings
+from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 from apps.core.models import CompanySettings
 
@@ -33,6 +36,48 @@ def _is_public(host):
         if not ip.is_global or ip.is_multicast:
             return False
     return True
+
+
+def _assert_public_peer(sock):
+    ip = ipaddress.ip_address(sock.getpeername()[0])
+    if not ip.is_global or ip.is_multicast:
+        sock.close()
+        raise FetchError("connected address is not public (possible DNS rebinding)")
+
+
+class _GuardedHTTPConnection(HTTPConnection):
+    def _new_conn(self):
+        sock = super()._new_conn()
+        _assert_public_peer(sock)
+        return sock
+
+
+class _GuardedHTTPSConnection(HTTPSConnection):
+    def _new_conn(self):
+        sock = super()._new_conn()
+        _assert_public_peer(sock)
+        return sock
+
+
+class _GuardedHTTPPool(HTTPConnectionPool):
+    ConnectionCls = _GuardedHTTPConnection
+
+
+class _GuardedHTTPSPool(HTTPSConnectionPool):
+    ConnectionCls = _GuardedHTTPSConnection
+
+
+class GuardedAdapter(HTTPAdapter):
+    """Re-checks the IP the socket actually connected to, closing the DNS-rebinding gap between
+    the pre-flight resolution in check_url() and the real connection."""
+
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {"http": _GuardedHTTPPool, "https": _GuardedHTTPSPool}
+
+
+def _uses_proxy(url):
+    return bool(requests.utils.get_environ_proxies(url))
 
 
 def check_url(url):
@@ -59,6 +104,11 @@ def html_to_text(raw):
 def fetch(url):
     session = requests.Session()
     session.trust_env = True  # honor the deployment's outbound proxy settings
+    if not getattr(settings, "VCOOS_WEB_FETCH_ALLOW_PRIVATE", False) and not _uses_proxy(url):
+        # Direct connections: verify the real peer address. Through a proxy the peer is the proxy, so
+        # destination filtering must also be enforced by the proxy (see README).
+        session.mount("http://", GuardedAdapter())
+        session.mount("https://", GuardedAdapter())
     for _ in range(MAX_REDIRECTS + 1):
         check_url(url)
         resp = session.get(url, timeout=TIMEOUT, allow_redirects=False, stream=True,

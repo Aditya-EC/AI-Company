@@ -1,0 +1,9 @@
+[Unit]
+Description=VCoOS maintenance (data retention)
+
+[Service]
+Type=oneshot
+User=vcoos
+WorkingDirectory=/opt/vcoos
+EnvironmentFile=/etc/vcoos/vcoos.env
+ExecStart=/opt/vcoos/.venv/bin/python manage.py apply_retention

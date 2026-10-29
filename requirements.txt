@@ -1,7 +1,7 @@
 # Runtime
 Django>=5.2,<5.3
 channels>=4.3,<5
-daphne>=4.2,<5
+uvicorn[standard]>=0.34,<1   # ASGI server (HTTP + WebSockets); replaces Daphne/Twisted
 channels-redis>=4.2,<5      # cross-process WebSocket events (production)
 celery>=5.6,<6              # optional background transport
 redis>=5,<9

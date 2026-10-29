@@ -8,7 +8,8 @@ from . import engine
 @shared_task(name="apps.orchestration.tasks.engine_tick")
 def engine_tick():
     """Periodic: recover, unblock and dispatch queued tasks to workers (claim happens in the worker)."""
-    worker = engine.new_worker_id()
+    worker = f"celery-beat:{engine.socket.gethostname()}"
+    engine.heartbeat(worker, kind="celery")
     engine.recover_interrupted()
     engine.unblock_ready_tasks()
     engine.warn_deadlines()

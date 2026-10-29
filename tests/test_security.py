@@ -232,8 +232,15 @@ def test_audit_chain_detects_tampering(db):
     assert not ok and bad == target.id
 
 
+def _vendor():
+    from django.db import connection
+    return connection.vendor
+
+
 @pytest.mark.django_db(transaction=True)
 def test_backup_create_verify_and_tamper_detection(tmp_path):
+    if _vendor() != "sqlite":
+        pytest.skip("SQLite backup path")
     audit.record("before.backup")
     out, manifest = backup.create_backup(tmp_path)
     assert backup.verify_backup(out) == (True, "ok")
@@ -248,6 +255,8 @@ def test_backup_create_verify_and_tamper_detection(tmp_path):
 
 @pytest.mark.django_db(transaction=True)
 def test_restore_from_backup(tmp_path):
+    if _vendor() != "sqlite":
+        pytest.skip("SQLite restore path")
     audit.record("snapshot.marker")
     out, _ = backup.create_backup(tmp_path)
     target = tmp_path / "restored.sqlite3"
@@ -256,6 +265,49 @@ def test_restore_from_backup(tmp_path):
     con = sqlite3.connect(target)
     assert con.execute("SELECT count(*) FROM core_auditevent WHERE action='snapshot.marker'").fetchone()[0] == 1
     con.close()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_postgres_backup_restore_rehearsal(tmp_path):
+    """Full rehearsal: dump, verify, detect tampering, restore into a scratch database, verify data and audit chain."""
+    if _vendor() != "postgresql":
+        pytest.skip("runs when the suite is executed against PostgreSQL")
+    import subprocess
+    from django.conf import settings as dj
+    from django.db import connection
+    for i in range(3):
+        audit.record("rehearsal.event", details={"i": i})
+    expected = AuditEvent.objects.count()
+    out, manifest = backup.create_backup(tmp_path)
+    assert manifest["vendor"] == "postgresql" and backup.verify_backup(out) == (True, "ok")
+    db = dj.DATABASES["default"]
+    env = {"PGPASSWORD": db["PASSWORD"], "PATH": "/usr/bin:/bin:/usr/lib/postgresql/16/bin"}
+    conn = ["-h", db["HOST"], "-p", str(db["PORT"]), "-U", db["USER"]]
+    scratch = f"{connection.settings_dict['NAME']}_restore"
+    subprocess.run(["dropdb", "--if-exists", *conn, scratch], env=env, check=True)
+    subprocess.run(["createdb", *conn, scratch], env=env, check=True)
+    try:
+        backup.restore_postgres(out, target_db=scratch)
+        count = subprocess.run(["psql", *conn, "-d", scratch, "-tAc", "select count(*) from core_auditevent"],
+                               env=env, capture_output=True, text=True, check=True).stdout.strip()
+        assert int(count) == expected
+        # Verify the restored audit chain with the application's own hashing code.
+        import psycopg
+        with psycopg.connect(host=db["HOST"], port=db["PORT"], user=db["USER"], password=db["PASSWORD"], dbname=scratch) as pg:
+            rows = pg.execute("select created_at, actor_label, action, target_type, target_id, details, prev_hash, hash "
+                              "from core_auditevent order by id").fetchall()
+        prev = audit.GENESIS
+        for created_at, actor, action, ttype, tid, details, prev_hash, h in rows:
+            ev = AuditEvent(created_at=created_at, actor_label=actor, action=action, target_type=ttype, target_id=tid,
+                            details=details, prev_hash=prev_hash)
+            assert prev_hash == prev and ev.compute_hash() == h
+            prev = h
+        assert len(rows) == expected
+    finally:
+        subprocess.run(["dropdb", "--if-exists", "--force", *conn, scratch], env=env)
+    with open(out, "r+b") as f:  # truncate the archive: verification must fail
+        f.truncate(out.stat().st_size // 2)
+    assert backup.verify_backup(out)[0] is False
 
 
 # ----------------------------------------------------------------- approvals
@@ -297,3 +349,50 @@ def test_author_cannot_review_own_work(llm, dept, company, local_model):
     task = make_task(dept, emp, status=Task.UNDER_REVIEW)
     with pytest.raises(services.InvalidTransition):
         services.review_task(task, user=u, outcome="accept")
+
+
+# ----------------------------------------------------------------- Phase 8 hardening
+
+def test_csp_nonce_on_every_inline_script(client, founder, company):
+    import re
+    client.login(username="founder", password=PASSWORD)
+    for url in ("/", "/office/", "/monitor/", "/accounts/password/"):
+        r = client.get(url)
+        csp = r["Content-Security-Policy"]
+        nonce = re.search(r"'nonce-([^']+)'", csp).group(1)
+        assert "object-src 'none'" in csp and "frame-ancestors 'none'" in csp and "'unsafe-inline'" not in csp.split("style-src")[0]
+        body = r.content.decode()
+        inline = re.findall(r"<script(?![^>]*\bsrc=)([^>]*)>", body)
+        assert inline and all(f'nonce="{nonce}"' in attrs for attrs in inline), url
+        assert "onclick=" not in body
+    assert client.get("/").headers["Content-Security-Policy"] != r["Content-Security-Policy"]  # fresh nonce per request
+
+
+def test_password_reset_rate_limited_without_enumeration(client, db, founder, settings):
+    settings.VCOOS_LOGIN_RATE_LIMIT = 2
+    from django.core import mail
+    for _ in range(4):
+        r = client.post(reverse("password_reset"), {"email": founder.email})
+        assert r.status_code == 302 and r["Location"].endswith("/accounts/password-reset/done/")
+    assert len(mail.outbox) == 2  # further requests silently dropped
+    assert AuditEvent.objects.filter(action="auth.password_reset_rate_limited").count() == 2
+
+
+def test_colour_fields_validated(db, dept):
+    from django.core.exceptions import ValidationError
+    dept.color = 'red" onmouseover="x'
+    with pytest.raises(ValidationError):
+        dept.full_clean()
+
+
+def test_sandbox_with_os_network_namespace(tmp_path, monkeypatch):
+    """The documented OS-level wrapper runs agent code with no network at the kernel level."""
+    import shutil
+    import subprocess
+    if not shutil.which("unshare") or subprocess.run(["unshare", "--net", "--map-root-user", "true"]).returncode != 0:
+        pytest.skip("unprivileged network namespaces unavailable")
+    monkeypatch.setenv("VCOOS_SANDBOX_WRAPPER", "unshare --net --map-root-user")
+    r = sandbox.run_python("print(sum(range(10)))", tmp_path)
+    assert r["exit_code"] == 0 and r["stdout"].strip() == "45"
+    r = sandbox.run_python("import socket", tmp_path)
+    assert r["exit_code"] != 0  # in-process hook still applies inside the namespace

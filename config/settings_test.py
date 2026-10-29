@@ -15,7 +15,8 @@ CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 VCOOS_ENCRYPTION_KEY = "kXr0d3Gq9m1oQe0T5C5y8w8QqvJp8m3yJ9w2xVv4bS4="
 # On-disk test database so backup/restore tests exercise the real SQLite file path.
-DATABASES["default"]["TEST"] = {"NAME": str(Path(tempfile.gettempdir()) / f"vcoos-test-{os.getpid()}.sqlite3")}
+if DATABASES["default"]["ENGINE"].endswith("sqlite3"):  # noqa: F405
+    DATABASES["default"]["TEST"] = {"NAME": str(Path(tempfile.gettempdir()) / f"vcoos-test-{os.getpid()}.sqlite3")}  # noqa: F405
 STORAGES = {**STORAGES, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}  # noqa: F405
 STATIC_ROOT = Path(tempfile.mkdtemp(prefix="vcoos-static-"))
 VCOOS_REPORT_ROOT = Path(tempfile.mkdtemp(prefix="vcoos-reports-"))

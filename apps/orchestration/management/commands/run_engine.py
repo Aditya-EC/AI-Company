@@ -35,6 +35,7 @@ class Command(BaseCommand):
             close_old_connections()
             futures = {f for f in futures if not f.done()}
             claimed = engine.tick(worker, run=False)
+            engine.heartbeat(worker, claimed=len(claimed))
             for tid in claimed:
                 self.stdout.write(f"claimed task {tid}")
                 futures.add(pool.submit(self._run, tid, worker))
@@ -46,6 +47,7 @@ class Command(BaseCommand):
                 break
             time.sleep(interval)
         pool.shutdown(wait=True)
+        engine.heartbeat(worker, stopped=True)
 
     @staticmethod
     def _run_meeting(meeting, worker):

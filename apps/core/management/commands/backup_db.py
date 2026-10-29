@@ -19,6 +19,12 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("Backup verified."))
             return
         if restore:
+            from django.db import connection
+
+            if connection.vendor == "postgresql":
+                target = backup.restore_postgres(restore)
+                self.stdout.write(self.style.SUCCESS(f"Restored into database {target}. Run verify_audit next."))
+                return
             target = backup.restore_sqlite(restore)
             self.stdout.write(self.style.SUCCESS(f"Restored into {target} (previous copy kept as .pre-restore)."))
             return

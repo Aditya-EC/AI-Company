@@ -50,6 +50,41 @@ class RateLimitedLoginView(auth_views.LoginView):
         return response
 
 
+def healthz_ready(request):
+    from . import health
+
+    if not health.authorized(request):
+        return JsonResponse({"error": "unauthorized"}, status=401)
+    ok, results = health.readiness()
+    return JsonResponse({"status": "ready" if ok else "not_ready", "checks": results}, status=200 if ok else 503)
+
+
+def metrics(request):
+    from django.http import HttpResponse
+
+    from . import health
+
+    if not health.authorized(request):
+        return HttpResponse("unauthorized\n", status=401, content_type="text/plain")
+    return HttpResponse(health.metrics_text(), content_type="text/plain; version=0.0.4")
+
+
+class RateLimitedPasswordResetView(auth_views.PasswordResetView):
+    """Limits reset emails per client IP and per address to prevent abuse as a mail cannon."""
+
+    template_name = "auth/password_reset.html"
+    email_template_name = "auth/password_reset_email.txt"
+
+    def post(self, request, *args, **kwargs):
+        ip, email = request.META.get("REMOTE_ADDR", ""), request.POST.get("email", "")[:254]
+        key_user = f"reset:{email.lower()}"
+        if ratelimit.is_limited(ip, key_user):
+            audit.record("auth.password_reset_rate_limited", details={"email": email}, request=request)
+            return redirect("password_reset_done")  # same response as success: no account enumeration
+        ratelimit.register_failure(ip, key_user)
+        return super().post(request, *args, **kwargs)
+
+
 def healthz(request):
     from django.db import connection
 
@@ -71,6 +106,12 @@ def _employee_state_counts(user):
         for e in d["employees"]:
             counts[e["state"]] = counts.get(e["state"], 0) + 1
     return counts
+
+
+def _workers_alive():
+    from apps.orchestration.models import WorkerHeartbeat
+
+    return WorkerHeartbeat.alive().count()
 
 
 def dashboard(request):
@@ -98,6 +139,7 @@ def dashboard(request):
         "budgets": [(b, budget.spent(b)) for b in company_budgets],
         "incidents": Incident.objects.filter(is_resolved=False)[:5] if request.user.is_founder or request.user.is_ceo else [],
         "recent_events": AuditEvent.objects.select_related()[:10] if can(request.user, "view_audit") else [],
+        "workers_alive": _workers_alive(),
     }
     return render(request, "dashboard.html", ctx)
 
@@ -157,14 +199,17 @@ def employee_list(request):
         qs = qs.filter(Q(name__icontains=q) | Q(job_title__icontains=q) | Q(employee_id__icontains=q))
     if request.GET.get("department"):
         qs = qs.filter(department_id=request.GET["department"])
+    from django.db.models import Prefetch
+
     from apps.office.state import OPEN_STATUSES, employee_visual_state
 
-    qs = qs.prefetch_related("model_policies__model")
+    qs = qs.prefetch_related(
+        "model_policies__model",
+        Prefetch("tasks", queryset=Task.objects.filter(status__in=OPEN_STATUSES).order_by("priority", "-updated_at"), to_attr="open_tasks"))
     page = Paginator(qs, 25).get_page(request.GET.get("page"))
     rows = []
     for e in page:
-        open_tasks = list(e.tasks.filter(status__in=OPEN_STATUSES).order_by("priority", "-updated_at"))
-        state, task = employee_visual_state(e, open_tasks)
+        state, task = employee_visual_state(e, e.open_tasks)
         rows.append((e, state, task))
     return render(request, "employees/list.html", {"page": page, "rows": rows, "q": q, "departments": Department.objects.all()})
 

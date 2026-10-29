@@ -34,6 +34,26 @@ def new_worker_id():
     return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
 
 
+def heartbeat(worker_id, kind="engine", claimed=0, stopped=False):
+    """Record worker liveness (used by health checks, metrics and the dashboard)."""
+    from django.db.models import F
+
+    from .models import WorkerHeartbeat
+
+    now = timezone.now()
+    updated = WorkerHeartbeat.objects.filter(worker_id=worker_id).update(last_seen=now, stopped=stopped,
+                                                                         tasks_claimed=F("tasks_claimed") + claimed)
+    if not updated:
+        WorkerHeartbeat.objects.create(worker_id=worker_id, kind=kind, hostname=socket.gethostname()[:200], pid=os.getpid(),
+                                       last_seen=now, tasks_claimed=claimed, stopped=stopped)
+
+
+def prune_heartbeats(days=7):
+    from .models import WorkerHeartbeat
+
+    return WorkerHeartbeat.objects.filter(last_seen__lt=timezone.now() - timedelta(days=days)).delete()[0]
+
+
 # --------------------------------------------------------------------------- assignment
 
 def select_employee(task):
@@ -115,6 +135,16 @@ def claim_task(task_id, worker_id):
     lease = timezone.now() + timedelta(seconds=settings.VCOOS_TASK_LEASE_SECONDS)
     now = timezone.now()
     with transaction.atomic():
+        # Serialize claims: lock the company row (global capacity) and the employee row (per-employee
+        # concurrency), then re-check both inside the transaction so concurrent workers cannot overshoot.
+        locked_company = CompanySettings.objects.select_for_update().get(pk=company.pk)
+        if locked_company.emergency_stop:
+            return None
+        if Task.objects.filter(status=T.RUNNING).count() >= locked_company.max_concurrent_tasks:
+            return None
+        EmployeeProfile.objects.select_for_update().filter(pk=emp.pk).first()
+        if Task.objects.filter(assigned_employee=emp, status=T.RUNNING).count() >= emp.max_concurrent_tasks:
+            return None
         won = Task.objects.filter(pk=task.pk, status=T.QUEUED).update(
             status=T.RUNNING, lease_owner=worker_id, lease_expires_at=lease, started_at=task.started_at or now, updated_at=now,
             status_reason="running")

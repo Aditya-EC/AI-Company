@@ -28,7 +28,6 @@ ALLOWED_HOSTS = [h for h in env("VCOOS_ALLOWED_HOSTS", "localhost,127.0.0.1").sp
 CSRF_TRUSTED_ORIGINS = [o for o in env("VCOOS_CSRF_TRUSTED_ORIGINS", "").split(",") if o]
 
 INSTALLED_APPS = [
-    "daphne",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -47,6 +46,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "apps.core.middleware.SecurityHeadersMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -97,7 +97,10 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": env("VCOOS_SQLITE_PATH", str(BASE_DIR / "db.sqlite3")),
-            "OPTIONS": {"timeout": 20},
+            # IMMEDIATE transactions + WAL let several engine worker threads share SQLite without
+            # "database is locked" errors from read->write lock upgrades. Use PostgreSQL in production.
+            "OPTIONS": {"timeout": 30, "transaction_mode": "IMMEDIATE",
+                        "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"},
         }
     }
 

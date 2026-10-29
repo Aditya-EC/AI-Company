@@ -46,4 +46,4 @@
   {% if audit_events %}<div class="card"><h2>Audit trail</h2>{% for e in audit_events %}<div class="small mono">{{ e.created_at|date:"H:i:s" }} {{ e.action }} · {{ e.actor_label }}</div>{% endfor %}</div>{% endif %}
 </div></div>
 {% endblock %}
-{% block scripts %}{% if task.status == "running" or task.status == "queued" %}<script>setTimeout(() => location.reload(), 4000);</script>{% endif %}{% endblock %}
+{% block scripts %}{% if task.status == "running" or task.status == "queued" %}<script nonce="{{ request.csp_nonce }}">setTimeout(() => location.reload(), 4000);</script>{% endif %}{% endblock %}

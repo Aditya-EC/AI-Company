@@ -35,7 +35,7 @@ def create_backup(dest_dir=None):
     elif vendor == "postgresql":
         db = settings.DATABASES["default"]
         out = dest / f"vcoos-{stamp}.pgdump"
-        env = {**os.environ, "PGPASSWORD": db.get("PASSWORD", "")}
+        env = _pg_env(db)
         subprocess.run(["pg_dump", "-Fc", "-h", db["HOST"], "-p", str(db["PORT"]), "-U", db["USER"], "-f", str(out), db["NAME"]],
                        check=True, env=env, timeout=3600)
     else:
@@ -59,7 +59,33 @@ def verify_backup(path):
             con.close()
         if res != "ok" or not tables:
             return False, f"integrity check failed: {res}"
+    elif manifest["vendor"] == "postgresql":
+        # pg_restore --list parses the whole archive table of contents; a truncated/corrupt dump fails here.
+        proc = subprocess.run(["pg_restore", "--list", str(path)], capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            return False, f"archive unreadable: {proc.stderr.strip()[:300]}"
+        if "core_auditevent" not in proc.stdout:
+            return False, "archive does not contain the audit table"
     return True, "ok"
+
+
+def _pg_env(db):
+    return {**os.environ, "PGPASSWORD": db.get("PASSWORD", "")}
+
+
+def restore_postgres(path, target_db=None):
+    """Restore a verified pg_dump archive into `target_db` (default: the configured database).
+    Stop the web and engine services first; existing objects are dropped and recreated."""
+    ok, why = verify_backup(path)
+    if not ok:
+        raise RuntimeError(f"refusing to restore: {why}")
+    db = settings.DATABASES["default"]
+    target_db = target_db or db["NAME"]
+    proc = subprocess.run(["pg_restore", "--clean", "--if-exists", "--no-owner", "--exit-on-error", "-h", db["HOST"], "-p", str(db["PORT"]),
+                           "-U", db["USER"], "-d", target_db, str(path)], capture_output=True, text=True, env=_pg_env(db), timeout=3600)
+    if proc.returncode != 0:
+        raise RuntimeError(f"pg_restore failed: {proc.stderr.strip()[:500]}")
+    return target_db
 
 
 def restore_sqlite(path, target=None):

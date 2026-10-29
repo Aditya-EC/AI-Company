@@ -2,7 +2,7 @@
 
 A Django application in which a human **Founder** supervises a company of AI employees. All employees run on **one shared orchestration engine**, reach models through **one model gateway**, use tools only through a **default-deny tool registry**, and leave a **hash-chained audit trail**.
 
-Implemented so far: **Stage 1** (the secure foundation and the end-to-end vertical slice from spec §26), **Stage 2 / Phase 6** (research proposals, CEO evaluation with Founder override, planning, project priorities and the Software Factory), and **Stage 3 / Phase 7** (reports and exports, the knowledge base, AI meetings and notification preferences). Everything in the UI is wired to real backend behaviour. Features from later phases are not shown as placeholder buttons; they are listed under [Roadmap](#roadmap).
+Implemented so far: **Stage 1** (the secure foundation and the end-to-end vertical slice from spec §26), **Stage 2 / Phase 6** (research proposals, CEO evaluation with Founder override, planning, project priorities and the Software Factory), **Stage 3 / Phase 7** (reports and exports, the knowledge base, AI meetings and notification preferences), and **Stage 4 / Phase 8** (production readiness: PostgreSQL-verified, load-tested, security-reviewed, observable). See [docs/SECURITY.md](docs/SECURITY.md) and [docs/OPERATIONS.md](docs/OPERATIONS.md). Everything in the UI is wired to real backend behaviour. Features from later phases are not shown as placeholder buttons; they are listed under [Roadmap](#roadmap).
 
 ---
 
@@ -12,7 +12,7 @@ Implemented so far: **Stage 1** (the secure foundation and the end-to-end vertic
  Browser (Django templates, Three.js office, 2D fallback)
    │  HTTPS (session + CSRF)            │  WSS /ws/activity/ (authenticated, dept-filtered, read-only)
    ▼                                    ▼
- Daphne ASGI ── Django views ── apps.core.permissions (server-side, default deny)
+ Uvicorn ASGI ── Django views ── apps.core.permissions (server-side, default deny)
                      │
                      ├── apps.work.services   task state machine (conditional UPDATEs, history, audit)
                      │
@@ -69,7 +69,8 @@ Budget (company|department|employee|project|provider × daily|monthly|total)   A
 | `templates/`, `static/` | UI (light and dark themes, responsive) and the Three.js office |
 | `apps/knowledge/` | knowledge base (documents, versions, review rules, agent context) and AI meetings |
 | `apps/reports/` | report calculations, CSV/PDF export, export jobs |
-| `tests/` | 129 tests, including the full §26 scenario and the Phase 6–7 workflows |
+| `tests/` | 147 tests: the §26 scenario, the Phase 6–8 workflows, concurrency/load and query-count checks |
+| `docs/` | security model and review findings (`SECURITY.md`), operations runbook (`OPERATIONS.md`) |
 | `deploy/` | systemd units, nginx config, backup timer |
 
 ### Company workflow (Phase 6)
@@ -131,7 +132,7 @@ python manage.py create_founder founder             # prompts for a password
 
 Run two processes:
 ```bash
-daphne -p 8000 config.asgi:application      # web + WebSockets  → http://localhost:8000
+uvicorn config.asgi:application --port 8000 --reload   # web + WebSockets → http://localhost:8000
 python manage.py run_engine                 # the orchestration engine worker
 ```
 
@@ -178,12 +179,17 @@ See `.env.example` for the full list. The essentials:
 | `VCOOS_WORKSPACE_ROOT`, `VCOOS_BACKUP_ROOT`, `VCOOS_REPORT_ROOT` | task workspaces, backups and report exports |
 | `VCOOS_SANDBOX_WRAPPER` | OS-level sandbox prefix for agent code (strongly recommended) |
 | `VCOOS_TASK_LEASE_SECONDS` | worker lease length (default 120) |
+| `VCOOS_HEALTH_TOKEN` | bearer token for `/healthz/ready` and `/metrics` |
 
 ---
 
 ## 4. Tests
 ```bash
-pytest            # 129 tests, about 1 minute
+pytest            # 147 tests, about 1-2 minutes (SQLite)
+```
+Run the same suite against PostgreSQL (the backup/restore rehearsal test only runs there):
+```bash
+VCOOS_DB_ENGINE=postgres VCOOS_DB_HOST=127.0.0.1 VCOOS_DB_USER=vcoos VCOOS_DB_PASSWORD=... pytest
 ```
 Coverage of spec §24: role and scoped permissions; unauthorized page, API and report access; model selection and fallback; rate limits, outages and backoff; invalid credentials; quota exhaustion; the circuit breaker; paid-model gating; budget enforcement; task retries, step limits and cancellation; dependency scheduling and cycle detection; recovery after a worker crash (idempotent and non-idempotent); approvals (CEO and Founder-only); tool grants, explicit deny, schema validation and path traversal; audit events and tamper detection; WebSocket auth and department filtering; sandbox isolation (network, filesystem, subprocess, ctypes, environment, timeout); prioritization and on-hold; report and budget calculations; sensitive Founder-only actions; exclusive claiming and concurrency limits; the emergency stop (before and during execution); backup, verification, tamper detection and restore; prompt-injection handling; and the full §26 scenario end to end through the HTTP views.
 
@@ -195,9 +201,11 @@ The adapters are tested over real HTTP against `tests/fake_llm.py`, a scripted t
 1. Create a `vcoos` user. Clone to `/opt/vcoos`, create `.venv`, and run `pip install -r requirements.txt`.
 2. Provision PostgreSQL and Redis. Write `/etc/vcoos/vcoos.env` from `.env.example` with mode 600.
 3. Run `python manage.py migrate && python manage.py collectstatic --noinput && python manage.py seed_vcoos`, then `create_founder`.
-4. Install the units in `deploy/` (`vcoos-web`, `vcoos-engine`, `vcoos-backup.timer`) and the nginx site with TLS.
+4. Install the units in `deploy/` (`vcoos-web`, `vcoos-engine`, `vcoos-backup.timer`, `vcoos-maintenance.timer`) and the nginx site with TLS.
 5. Install bubblewrap and set `VCOOS_SANDBOX_WRAPPER` (see `.env.example`). Running agent code on a dedicated, unprivileged host or VM is recommended.
-6. Run `python manage.py check --deploy` and `pip-audit -r requirements.txt` on each release.
+6. Run `python manage.py vcoos_preflight` (it must report 0 failed) and `pip-audit -r requirements.txt` on each release.
+
+The full runbook (monitoring, alerts, restore drills, retention, upgrades, incident response, key rotation) is in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 **Backups:** `python manage.py backup_db` writes a consistent snapshot with a SHA-256 manifest and verifies it (`pg_dump -Fc` on PostgreSQL, the online backup API on SQLite). Check a file with `backup_db --verify FILE`. Restore SQLite with `backup_db --restore FILE` after stopping the services; restore PostgreSQL with `pg_restore`. Run `manage.py verify_audit` regularly. The timer does both nightly.
 
@@ -215,8 +223,9 @@ The adapters are tested over real HTTP against `tests/fake_llm.py`, a scripted t
 ---
 
 ## Roadmap
-Done here: **Phase 1** (foundation), **Phase 2** (engine), **Phase 3** (gateway), **Phase 4** (tool registry, permissions, sandbox, approvals, reviews, plus web.fetch, git.* and tests.run), **Phase 5** (3D office with a 2D fallback), **Phase 6** (proposals, CEO and Founder governance, planning, priorities, Software Factory, releases), and **Phase 7** (reports, knowledge base, meetings, notifications).
+Done here: **Phase 1** (foundation), **Phase 2** (engine), **Phase 3** (gateway), **Phase 4** (tool registry, permissions, sandbox, approvals, reviews, plus web.fetch, git.* and tests.run), **Phase 5** (3D office with a 2D fallback), **Phase 6** (proposals, CEO and Founder governance, planning, priorities, Software Factory, releases), **Phase 7** (reports, knowledge base, meetings, notifications), and **Phase 8** (production readiness).
 
-Next stages, building on the existing models and services:
-- **Phase 6+**: static analysis and dependency/licence scanning tools, project- and task-level tool-grant UI, deployment integrations (executing approved releases), structured AI meetings for architecture and release reviews.
-- **Phase 8**: load testing, query optimization, further hardening.
+Possible next steps, building on the existing models and services:
+- Static analysis and dependency/licence scanning as agent tools; project- and task-level tool-grant UI.
+- Deployment integrations that execute Founder-approved releases (today an approved release is authorized, not deployed).
+- Provider billing import (verified costs) and a container image for deployment.

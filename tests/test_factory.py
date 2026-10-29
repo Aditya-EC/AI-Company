@@ -108,6 +108,7 @@ def test_web_fetch_ssrf_protection(db, company, llm):
 def test_web_fetch_redirect_to_internal_blocked(db, company, llm, settings, monkeypatch):
     settings.VCOOS_WEB_FETCH_ALLOW_PRIVATE = False
     monkeypatch.setattr(webfetch, "_is_public", lambda host: host == "127.0.0.1")  # treat only the test server as public
+    monkeypatch.setattr(webfetch, "_assert_public_peer", lambda sock: None)  # ...at connect time too
     with pytest.raises(webfetch.FetchError, match="not a public address"):
         webfetch.fetch(f"{llm.url}/redirect-internal")
 
@@ -445,3 +446,12 @@ def test_factory_pages_render_and_permissions(client, seeded, founder, ceo, staf
     assert client.get(reverse("project_detail", args=[repo_project.pk])).status_code == 200
     assert client.post(reverse("project_action", args=[repo_project.pk]), {"action": "pause"}).status_code == 403
     assert client.post(reverse("proposal_detail", args=[proposal.pk]), {"outcome": "approve"}).status_code == 403
+
+
+def test_web_fetch_blocks_dns_rebinding_at_connect_time(db, company, llm, settings, monkeypatch):
+    """Pre-flight resolution says 'public' but the socket connects to a private address: must be refused."""
+    settings.VCOOS_WEB_FETCH_ALLOW_PRIVATE = False
+    monkeypatch.setattr(webfetch, "_is_public", lambda host: True)  # attacker-controlled DNS answers public first...
+    monkeypatch.setattr(webfetch, "_uses_proxy", lambda url: False)
+    with pytest.raises(webfetch.FetchError, match="DNS rebinding"):  # ...but the real connection lands on 127.0.0.1
+        webfetch.fetch(f"{llm.url}/page")

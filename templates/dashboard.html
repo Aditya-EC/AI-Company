@@ -6,7 +6,8 @@
 <div class="grid g4">
   <div class="card stat"><div class="label">AI employees</div><div class="value">{{ employee_total }}</div>
     <div class="sub">{% for s, n in employee_states.items %}<span class="state st-{{ s }}">{{ n }} {{ s|state_label }}</span>&nbsp; {% empty %}none yet{% endfor %}</div></div>
-  <div class="card stat"><div class="label">Running tasks</div><div class="value">{{ task_counts.running|default:0 }}</div><div class="sub">{{ task_counts.queued|default:0 }} queued · {{ task_counts.blocked|default:0 }} blocked</div></div>
+  <div class="card stat"><div class="label">Running tasks</div><div class="value">{{ task_counts.running|default:0 }}</div><div class="sub">{{ task_counts.queued|default:0 }} queued · {{ task_counts.blocked|default:0 }} blocked</div>
+    <div class="sub">{% if workers_alive %}<span class="state st-working">{{ workers_alive }} engine worker{{ workers_alive|pluralize }} live</span>{% else %}<span class="state st-failed">No engine worker running</span>{% if task_counts.queued %} — queued work will not start{% endif %}{% endif %}</div></div>
   <div class="card stat"><div class="label">Completion rate (30d)</div><div class="value">{% if completion_rate is not None %}{{ completion_rate }}%{% else %}—{% endif %}</div><div class="sub">{{ done_30d }} completed · {{ failed_30d }} failed</div></div>
   <div class="card stat"><div class="label">AI usage (30d)</div><div class="value">{{ usage_calls }}</div><div class="sub">calls · {{ usage_failures }} failed · {{ usage_fallbacks }} via fallback · est. ${{ usage_cost|floatformat:4 }}</div></div>
 </div>

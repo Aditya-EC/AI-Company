@@ -14,6 +14,15 @@ PASSWORD = "Str0ng-Test-Passw0rd!"
 
 
 @pytest.fixture(autouse=True)
+def clear_cache():
+    """Rate-limit counters live in the cache; never let them leak between tests."""
+    from django.core.cache import cache
+    cache.clear()
+    yield
+    cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def isolated_workspace(settings, tmp_path):
     """Fresh workspace root per test (SQLite reuses primary keys after rollback)."""
     settings.VCOOS_WORKSPACE_ROOT = tmp_path / "workspaces"

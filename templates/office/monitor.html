@@ -14,9 +14,9 @@
 <div id="drawer" hidden></div>
 {% endblock %}
 {% block scripts %}
-<script>window.VCOOS_OFFICE = {force2d: false, stateUrl: "{% url 'api_office_state' %}", employeeUrl: "/api/employees/", wsPath: "/ws/activity/"};</script>
+<script nonce="{{ request.csp_nonce }}">window.VCOOS_OFFICE = {force2d: false, stateUrl: "{% url 'api_office_state' %}", employeeUrl: "/api/employees/", wsPath: "/ws/activity/"};</script>
 <script src="{% static 'js/office-common.js' %}"></script>
-<script>
+<script nonce="{{ request.csp_nonce }}">
 (function () {
   const O = VCOOSOffice, esc = O.esc;
   O.onState((state) => {

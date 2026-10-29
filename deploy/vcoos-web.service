@@ -1,5 +1,5 @@
 [Unit]
-Description=VCoOS web (Daphne ASGI: HTTP + WebSockets)
+Description=VCoOS web (Uvicorn ASGI: HTTP + WebSockets)
 After=network.target postgresql.service redis.service
 
 [Service]
@@ -7,7 +7,9 @@ User=vcoos
 Group=vcoos
 WorkingDirectory=/opt/vcoos
 EnvironmentFile=/etc/vcoos/vcoos.env
-ExecStart=/opt/vcoos/.venv/bin/daphne -b 127.0.0.1 -p 8000 --proxy-headers config.asgi:application
+# --workers > 1 requires VCOOS_REDIS_URL (Redis channel layer) so WebSocket events reach every process.
+ExecStart=/opt/vcoos/.venv/bin/uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --workers 2 \
+          --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header --ws-max-size 1048576 --limit-concurrency 500
 Restart=always
 NoNewPrivileges=true
 ProtectSystem=strict

@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily VCoOS maintenance
+
+[Timer]
+OnCalendar=*-*-* 03:41:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
