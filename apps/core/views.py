@@ -306,6 +306,9 @@ def company_settings(request):
             if action == "stop":
                 Incident.objects.create(title="Emergency stop activated", severity="critical", category="operations",
                                         description=company.emergency_stop_reason)
+                from .notify import notify_leadership
+
+                notify_leadership("security", "Emergency stop activated", company.emergency_stop_reason, "/settings/")
             messages.warning(request, "Emergency stop " + ("ACTIVATED" if action == "stop" else "lifted"))
             return redirect("company_settings")
         if action in ("enable_paid", "disable_paid"):
@@ -401,6 +404,25 @@ def audit_log(request):
     if request.GET.get("verify") == "1":
         verified = audit.verify_chain()
     return render(request, "audit/list.html", {"page": Paginator(qs, 50).get_page(request.GET.get("page")), "verified": verified})
+
+
+def notification_preferences(request):
+    from .models import NotificationPreference as NP
+
+    company = CompanySettings.get()
+    current = {p.kind: p for p in request.user.notification_preferences.all()}
+    if request.method == "POST":
+        for kind, _ in NP.KINDS:
+            in_app = kind in NP.MANDATORY or request.POST.get(f"in_app_{kind}") == "on"
+            email = request.POST.get(f"email_{kind}") == "on"
+            NP.objects.update_or_create(user=request.user, kind=kind, defaults={"in_app": in_app, "email": email})
+        audit.record("notifications.preferences_updated", request=request)
+        messages.success(request, "Notification preferences saved.")
+        return redirect("notification_preferences")
+    rows = [(kind, label, kind in NP.MANDATORY, current[kind].in_app if kind in current else True,
+             current[kind].email if kind in current else False) for kind, label in NP.KINDS]
+    return render(request, "notification_prefs.html", {"rows": rows, "email_enabled": company.email_notifications_enabled,
+                                                       "has_email": bool(request.user.email)})
 
 
 def notifications(request):

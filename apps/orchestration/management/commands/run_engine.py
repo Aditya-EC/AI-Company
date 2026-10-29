@@ -28,7 +28,8 @@ class Command(BaseCommand):
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
         self.stdout.write(f"VCoOS engine worker {worker} started")
-        pool = ThreadPoolExecutor(max_workers=max(CompanySettings.get().max_concurrent_tasks, 1))
+        max_workers = max(CompanySettings.get().max_concurrent_tasks, 1) + 1  # +1 slot for a meeting
+        pool = ThreadPoolExecutor(max_workers=max_workers)
         futures = set()
         while not stopping["flag"]:
             close_old_connections()
@@ -37,10 +38,21 @@ class Command(BaseCommand):
             for tid in claimed:
                 self.stdout.write(f"claimed task {tid}")
                 futures.add(pool.submit(self._run, tid, worker))
+            if not CompanySettings.get().emergency_stop and len(futures) < max_workers:
+                for meeting in engine.claim_meetings(worker):
+                    self.stdout.write(f"claimed meeting {meeting.pk}")
+                    futures.add(pool.submit(self._run_meeting, meeting, worker))
             if once:
                 break
             time.sleep(interval)
         pool.shutdown(wait=True)
+
+    @staticmethod
+    def _run_meeting(meeting, worker):
+        try:
+            engine.run_meeting(meeting, worker)
+        finally:
+            close_old_connections()
 
     @staticmethod
     def _run(task_id, worker):

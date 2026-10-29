@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Reports &amp; analytics</h1><div class="muted">Computed from recorded engine data. Estimated costs are shown separately from verified billing.</div></div></div>
+<form class="card" method="get" style="margin-bottom:16px"><div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">{% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="errors">{{ field.errors|join:" " }}</div>{% endif %}</div>{% endfor %}</div>
+{% if form.non_field_errors %}<div class="errors">{{ form.non_field_errors|join:" " }}</div>{% endif %}<button class="btn primary">View report</button></form>
+{% if report %}
+<div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between"><div><h2 style="margin:0">{{ report.title }}</h2><div class="muted small">{{ report.filters }} · generated {{ report.generated_at }}</div></div>
+<form method="post" class="row">{% csrf_token %}{% for field in form %}{% if field.value %}<input type="hidden" name="{{ field.html_name }}" value="{% if field.name == 'department' or field.name == 'project' or field.name == 'employee' %}{{ field.value }}{% else %}{{ field.value|stringformat:'s' }}{% endif %}">{% endif %}{% endfor %}
+<button class="btn" name="fmt" value="csv">Export CSV</button><button class="btn" name="fmt" value="pdf">Export PDF</button></form></div>
+{% for n in report.notes %}<div class="small muted">{{ n }}</div>{% endfor %}</div>
+{% for sec in report.sections %}<div class="card table-wrap" style="margin-bottom:12px"><h2>{{ sec.title }}</h2>
+{% if sec.kind == "metrics" %}<div class="grid g4">{% for label, value in sec.metrics %}<div class="stat"><div class="label">{{ label }}</div><div class="value" style="font-size:20px">{{ value }}</div></div>{% endfor %}</div>
+{% else %}<table class="table small"><thead><tr>{% for c in sec.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>{% for row in sec.rows %}<tr>{% for c in row %}<td>{{ c }}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="{{ sec.columns|length }}" class="muted">No data for these filters.</td></tr>{% endfor %}</tbody></table>{% endif %}
+{% if sec.note %}<div class="small muted" style="margin-top:6px">{{ sec.note }}</div>{% endif %}</div>{% endfor %}
+{% endif %}
+<div class="card table-wrap"><h2>My exports</h2><table class="table small"><tbody>{% for j in jobs %}<tr><td>#{{ j.pk }}</td><td>{{ j.get_kind_display }}</td><td>{{ j.get_fmt_display }}</td><td>{{ j.created_at|date:"Y-m-d H:i" }}</td><td>{% if j.status == "done" %}<a href="{% url 'report_download' j.pk %}">Download</a>{% else %}<span class="badge b-bad">{{ j.status }}</span>{% endif %}</td></tr>{% empty %}<tr><td class="muted">No exports yet.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

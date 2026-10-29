@@ -45,6 +45,7 @@ class CompanySettings(models.Model):
     repository_conventions = models.TextField(blank=True)
     ceo_approval_limit_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0,
                                                  help_text="CEO may approve proposals up to this estimated cost; above needs the Founder.")
+    email_notifications_enabled = models.BooleanField(default=False, help_text="Founder-approved: allow email delivery of notifications.")
     web_allowed_domains = models.JSONField(default=list, blank=True, help_text="If set, web.fetch is limited to these domains.")
     emergency_stop = models.BooleanField(default=False, help_text="Halts all new agent execution and tool use.")
     emergency_stop_reason = models.CharField(max_length=500, blank=True)
@@ -168,6 +169,8 @@ class PermissionAssignment(models.Model):
         ("manage_employees", "Create / edit employees"),
         ("view_tasks", "View tasks"),
         ("view_projects", "View projects & proposals"),
+        ("view_knowledge", "Read knowledge base"),
+        ("manage_knowledge", "Write knowledge drafts / approve non-policy documents"),
         ("manage_projects", "Manage projects"),
         ("manage_tasks", "Create / control tasks"),
         ("review_tasks", "Review deliverables"),
@@ -202,6 +205,7 @@ class Budget(models.Model):
     project = models.ForeignKey("work.Project", null=True, blank=True, on_delete=models.CASCADE)
     provider = models.ForeignKey("gateway.ModelProvider", null=True, blank=True, on_delete=models.CASCADE)
     is_active = models.BooleanField(default=True)
+    warned_period = models.CharField(max_length=20, blank=True, help_text="Period key of the last 80% warning (sent once per period).")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def clean(self):
@@ -292,3 +296,26 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class NotificationPreference(models.Model):
+    """Per-user delivery choice per notification kind. Missing rows mean: in-app on, email off."""
+
+    KINDS = [
+        ("task_completed", "Task completed"), ("task_failed", "Task failed"), ("task_paused", "Task paused (no model)"),
+        ("task_interrupted", "Task interrupted"), ("review", "Review requested / outcome"), ("approval", "Approval requested"),
+        ("budget", "Budget warnings"), ("provider_auth", "Provider credential failure"), ("quota", "Model quota exhausted"),
+        ("models_exhausted", "All models failed"), ("security", "Security incidents"), ("deadline", "Deadline risk"),
+        ("release", "Release readiness"), ("ceo_decision", "Important CEO decisions"), ("proposal", "New proposals"),
+        ("proposal_escalated", "Proposal escalations"), ("plan", "Plans ready"), ("meeting", "Meeting outcomes"),
+        ("knowledge", "Knowledge review requests"),
+    ]
+    # Cannot be switched off in-app: they require action for safety or governance.
+    MANDATORY = {"security", "provider_auth", "approval", "proposal_escalated"}
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notification_preferences")
+    kind = models.CharField(max_length=30, choices=KINDS)
+    in_app = models.BooleanField(default=True)
+    email = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "kind"], name="uniq_notification_pref")]

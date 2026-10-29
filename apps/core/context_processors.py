@@ -7,7 +7,7 @@ def company(request):
         return {}
     user = request.user
     perms = {p: can(user, p) for p in [
-        "view_company", "view_employees", "view_tasks", "view_projects", "manage_projects", "view_monitor", "view_models", "view_audit",
+        "view_company", "view_reports", "view_knowledge", "manage_knowledge", "view_employees", "view_tasks", "view_projects", "manage_projects", "view_monitor", "view_models", "view_audit",
         "manage_settings", "manage_models", "manage_tools", "manage_departments", "manage_employees",
         "manage_tasks", "review_tasks", "emergency_stop",
     ]}

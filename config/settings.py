@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     "apps.work",
     "apps.orchestration",
     "apps.office",
+    "apps.knowledge",
+    "apps.reports",
 ]
 
 MIDDLEWARE = [
@@ -178,6 +180,7 @@ VCOOS_EXECUTION_BACKEND = env("VCOOS_EXECUTION_BACKEND", "worker")  # "worker" o
 # VCoOS-specific
 VCOOS_ENCRYPTION_KEY = env("VCOOS_ENCRYPTION_KEY", "")  # Fernet key for stored provider credentials
 VCOOS_WORKSPACE_ROOT = Path(env("VCOOS_WORKSPACE_ROOT", str(BASE_DIR / "var" / "workspaces")))
+VCOOS_REPORT_ROOT = Path(env("VCOOS_REPORT_ROOT", str(BASE_DIR / "var" / "reports")))
 VCOOS_BACKUP_ROOT = Path(env("VCOOS_BACKUP_ROOT", str(BASE_DIR / "var" / "backups")))
 VCOOS_LOGIN_RATE_LIMIT = int(env("VCOOS_LOGIN_RATE_LIMIT", "5"))  # attempts per window
 VCOOS_LOGIN_RATE_WINDOW = int(env("VCOOS_LOGIN_RATE_WINDOW", "300"))  # seconds

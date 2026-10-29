@@ -4,6 +4,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import timedelta
+from decimal import Decimal
 
 from django.db.models import F
 from django.utils import timezone
@@ -67,6 +68,21 @@ def _mark_failure(provider, err):
         notify_leadership("provider_auth", f"Invalid credentials: {provider.name}", "Update the credential reference for this provider.")
     elif err.kind == GatewayError.QUOTA_EXHAUSTED:
         notify_leadership("quota", f"Quota exhausted: {provider.name}", err.message)
+
+
+def _budget_warnings(employee, task, provider):
+    """Warn leadership once per budget period when spend crosses 80% of a limit."""
+    from apps.core.models import Budget
+
+    now = timezone.now()
+    for b in budget.applicable_budgets(employee, getattr(task, "project", None), provider):
+        key = {"daily": now.strftime("%Y-%m-%d"), "monthly": now.strftime("%Y-%m")}.get(b.period, "total")
+        if b.warned_period == key or b.limit_usd <= 0:
+            continue
+        spent = budget.spent(b)
+        if spent >= b.limit_usd * Decimal("0.8") and Budget.objects.filter(pk=b.pk).exclude(warned_period=key).update(warned_period=key):
+            notify_leadership("budget", f"Budget warning: {b} is {int(100 * spent / b.limit_usd)}% used",
+                              f"Spent ${spent:.4f} (estimates unless billed data is recorded).", "/budgets/")
 
 
 def eligibility(entry, requirements, company, *, employee, task, est_cost):
@@ -136,6 +152,8 @@ def route_chat(employee, messages, *, requirements=(), task=None, execution=None
                     validator(result.text)  # raises GatewayError(INVALID_OUTPUT)
                 usage.save()
                 _mark_success(model.provider)
+                if model.is_paid:
+                    _budget_warnings(employee, task, model.provider)
                 attempts.append({"model": str(model), "outcome": "selected", "attempt": attempt + 1})
                 return RouteResult(result.text, model, attempts, usage)
             except GatewayError as err:

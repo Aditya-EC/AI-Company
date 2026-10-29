@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}Notification preferences{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Notification preferences</h1><div class="muted">Safety and governance notifications cannot be switched off in-app.</div></div><a class="btn" href="{% url 'notifications' %}">Back to notifications</a></div>
+{% if not email_enabled %}<ul class="messages"><li>Email delivery is disabled by the Founder; email choices are saved but not used until it is enabled.</li></ul>{% elif not has_email %}<ul class="messages"><li>Your account has no email address, so email delivery is not possible.</li></ul>{% endif %}
+<form method="post" class="card table-wrap" style="max-width:720px">{% csrf_token %}<table class="table"><thead><tr><th>Notification</th><th>In-app</th><th>Email</th></tr></thead><tbody>
+{% for kind, label, mandatory, in_app, email in rows %}<tr><td>{{ label }}{% if mandatory %} <span class="badge">required</span>{% endif %}</td><td><input type="checkbox" class="check" name="in_app_{{ kind }}" {% if in_app or mandatory %}checked{% endif %} {% if mandatory %}disabled{% endif %} aria-label="In-app: {{ label }}"></td><td><input type="checkbox" class="check" name="email_{{ kind }}" {% if email %}checked{% endif %} aria-label="Email: {{ label }}"></td></tr>{% endfor %}
+</tbody></table><button class="btn primary" style="margin-top:12px">Save preferences</button></form>
+{% endblock %}

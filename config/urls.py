@@ -3,7 +3,9 @@ from django.urls import path
 
 from apps.core import views as core
 from apps.gateway import views as gateway
+from apps.knowledge import views as knowledge
 from apps.office import views as office
+from apps.reports import views as reports
 from apps.tools import views as tools
 from apps.work import factory_views as factory
 from apps.work import views as work
@@ -57,4 +59,13 @@ urlpatterns = auth + [
     path("settings/users/", core.users_view, name="users"),
     path("budgets/", core.budgets_view, name="budgets"),
     path("notifications/", core.notifications, name="notifications"),
+    path("notifications/preferences/", core.notification_preferences, name="notification_preferences"),
+    path("knowledge/", knowledge.knowledge_list, name="knowledge_list"),
+    path("knowledge/new/", knowledge.knowledge_create, name="knowledge_create"),
+    path("knowledge/<int:pk>/", knowledge.knowledge_detail, name="knowledge_detail"),
+    path("meetings/", knowledge.meeting_list, name="meeting_list"),
+    path("meetings/<int:pk>/", knowledge.meeting_detail, name="meeting_detail"),
+    path("meetings/<int:pk>/action/", knowledge.meeting_action, name="meeting_action"),
+    path("reports/", reports.reports_home, name="reports"),
+    path("reports/exports/<int:pk>/", reports.report_download, name="report_download"),
 ]

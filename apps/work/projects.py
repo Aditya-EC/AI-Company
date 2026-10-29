@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.core import audit
 from apps.core.models import CompanySettings, Department
-from apps.core.notify import notify_leadership
+from apps.core.notify import notify_founder, notify_leadership
 
 from . import repo, services
 from .models import ApprovalRequest, Decision, Milestone, Priority, Project, Release, Task, TaskDependency, TestRun
@@ -162,6 +162,8 @@ def activate_plan(project, *, user, rationale=""):
         Decision.objects.create(kind="plan", outcome="activated", rationale=rationale, project=project, made_by=user,
                                 authority="founder" if user.is_founder else "ceo", effects={"tasks_queued": len(drafts)})
         audit.record("project.plan_activated", user=user, target=project, details={"tasks": len(drafts)})
+    if not user.is_founder:
+        notify_founder("ceo_decision", f"Plan activated for {project.code}: {len(drafts)} tasks", rationale[:300], f"/projects/{project.pk}/")
     return drafts
 
 
@@ -197,6 +199,9 @@ def change_project_priority(project, priority, *, user, reason=""):
         Decision.objects.create(kind="priority", outcome=Priority(priority).label, rationale=reason, project=project, made_by=user,
                                 authority="founder" if user.is_founder else "ceo", effects=effects)
         audit.record("project.priority", user=user, target=project, details=effects | {"reason": reason[:300]})
+    if not user.is_founder:
+        notify_founder("ceo_decision", f"Priority of {project.code} changed to {Priority(priority).label}",
+                       f"By {user.username}: {reason}"[:300], f"/projects/{project.pk}/")
     return effects
 
 

@@ -9,3 +9,4 @@ requests>=2.32,<3
 cryptography>=44
 whitenoise>=6.9,<7
 psycopg[binary]>=3.2,<4     # PostgreSQL in production
+reportlab>=4.2,<6          # PDF report export

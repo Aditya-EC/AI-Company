@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block title %}New document{% endblock %}
+{% block content %}<div class="page-head"><div><h1>New knowledge document</h1><div class="muted">Version 1 is created pending review. Policies, standards and procedures need Founder approval.</div></div></div>
+<div class="card"><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Create document</button></form></div>{% endblock %}

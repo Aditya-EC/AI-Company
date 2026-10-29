@@ -18,3 +18,4 @@ VCOOS_ENCRYPTION_KEY = "kXr0d3Gq9m1oQe0T5C5y8w8QqvJp8m3yJ9w2xVv4bS4="
 DATABASES["default"]["TEST"] = {"NAME": str(Path(tempfile.gettempdir()) / f"vcoos-test-{os.getpid()}.sqlite3")}
 STORAGES = {**STORAGES, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}  # noqa: F405
 STATIC_ROOT = Path(tempfile.mkdtemp(prefix="vcoos-static-"))
+VCOOS_REPORT_ROOT = Path(tempfile.mkdtemp(prefix="vcoos-reports-"))

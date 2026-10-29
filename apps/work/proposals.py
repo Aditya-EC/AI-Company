@@ -177,6 +177,11 @@ def decide(proposal, *, user, outcome, rationale="", planning_department=None, p
                                            project=Project.objects.filter(proposal=proposal).first())
         audit.record("proposal.decided", user=user, target=proposal,
                      details={"outcome": outcome, "authority": authority, "override": is_override, "effects": effects})
+    if authority == "ceo" and outcome != "escalate":
+        from apps.core.notify import notify_founder
+
+        notify_founder("ceo_decision", f"CEO decision on {proposal.code}: {outcome}", f"{proposal.title}. {rationale}"[:300],
+                       f"/proposals/{proposal.pk}/")
     if outcome == "escalate":
         notify_leadership("proposal_escalated", f"{proposal.code} escalated to the Founder", rationale[:300], f"/proposals/{proposal.pk}/")
     return decision

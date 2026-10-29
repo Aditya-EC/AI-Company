@@ -189,6 +189,56 @@ def tests_run(ctx):
             "output": res["output"][-6000:]}
 
 
+@tool("knowledge.search", "Search company knowledge", "Search approved company documents you are permitted to read "
+      "(company-wide, your department, your task's project).",
+      {"type": "object", "required": ["query"], "properties": {"query": _str("keywords")}},
+      {"type": "object", "properties": {"results": {"type": "array"}}})
+def knowledge_search(ctx, query):
+    from apps.knowledge import services as kb
+
+    hits = kb.search(kb.agent_documents(ctx.employee, ctx.task), query, limit=8)
+    return {"results": [{"document_id": d.pk, "title": d.title, "category": d.category, "version": d.current_version.number,
+                         "snippet": snip} for d, _, snip in hits]}
+
+
+@tool("knowledge.read", "Read company document", "Read the approved current version of a document returned by knowledge.search.",
+      {"type": "object", "required": ["document_id"], "properties": {"document_id": {"type": "integer"}}},
+      {"type": "object", "properties": {"title": _str(""), "content": _str("")}})
+def knowledge_read(ctx, document_id):
+    from apps.knowledge import services as kb
+
+    doc = kb.agent_documents(ctx.employee, ctx.task).filter(pk=document_id).first()
+    if doc is None:
+        raise ToolError("document not found or not accessible")
+    return {"title": doc.title, "category": doc.category, "version": doc.current_version.number,
+            "content": doc.current_version.content[:20000]}
+
+
+@tool("knowledge.propose", "Propose knowledge document", "Submit a draft document (e.g. lessons learned, technical notes) for human "
+      "review. Drafts never become company knowledge until a human approves them.",
+      {"type": "object", "required": ["title", "category", "content"],
+       "properties": {"title": _str(""), "category": _str("technical, research, lessons, adr, requirements, project, policy, standard, procedure"),
+                      "content": _str(""), "source_url": _str("optional source")}},
+      {"type": "object", "properties": {"document_id": {"type": "integer"}, "status": _str("")}}, risk="medium")
+def knowledge_propose(ctx, title, category, content, source_url=""):
+    from apps.knowledge import services as kb
+    from apps.knowledge.models import KnowledgeDocument as Doc
+
+    if category not in dict(Doc.CATEGORIES) or category == "meeting_notes":
+        raise ToolError("unknown category")
+    if source_url and not source_url.startswith(("http://", "https://")):
+        raise ToolError("source_url must be http(s)")
+    project = ctx.task.project if ctx.task.project_id else None
+    try:
+        doc, _ = kb.create_document(title=title, category=category, content=content[:50000], employee=ctx.employee,
+                                    access=Doc.PROJECT if project else Doc.DEPARTMENT, department=ctx.employee.department,
+                                    project=project, source="external" if source_url else "agent", source_url=source_url,
+                                    source_task=ctx.task)
+    except kb.KnowledgeError as exc:
+        raise ToolError(str(exc))
+    return {"document_id": doc.pk, "status": "submitted for human review"}
+
+
 def _validate(schema, data):
     if not isinstance(data, dict):
         raise ToolError("tool input must be a JSON object")
@@ -202,6 +252,8 @@ def _validate(schema, data):
     for key, val in data.items():
         if props[key].get("type") == "string" and not isinstance(val, str):
             raise ToolError(f"{key} must be a string")
+        if props[key].get("type") == "integer" and (not isinstance(val, int) or isinstance(val, bool)):
+            raise ToolError(f"{key} must be an integer")
 
 
 def sync_definitions():

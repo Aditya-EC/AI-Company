@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Knowledge base{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Knowledge base</h1><div class="muted">Only approved versions are served to readers and AI employees. Agent and external contributions always wait for human review.</div></div>
+{% if can_write %}<a class="btn primary" href="{% url 'knowledge_create' %}">New document</a>{% endif %}</div>
+<form class="row card" method="get" style="margin-bottom:16px"><input class="input" name="q" value="{{ q }}" placeholder="Search approved knowledge" style="max-width:320px">
+<select class="input" name="category" style="max-width:220px"><option value="">All categories</option>{% for k, l in categories %}<option value="{{ k }}" {% if k == category %}selected{% endif %}>{{ l }}</option>{% endfor %}</select><button class="btn">Search</button></form>
+<div class="grid g3"><div class="card span2 table-wrap"><table class="table"><thead><tr><th>Document</th><th>Category</th><th>Access</th><th>Status</th><th>Source</th></tr></thead><tbody>
+{% for d, snip in page %}<tr><td><a href="{% url 'knowledge_detail' d.pk %}">{{ d.title }}</a>{% if d.is_authoritative %} <span class="badge b-purple">authoritative</span>{% endif %}{% if snip %}<div class="small muted">{{ snip|truncatechars:220 }}</div>{% endif %}</td>
+<td class="small">{{ d.get_category_display }}</td><td class="small">{{ d.get_access_display }}{% if d.department %}: {{ d.department.name }}{% endif %}{% if d.project %}: {{ d.project.name }}{% endif %}</td>
+<td><span class="badge {% if d.status == 'approved' %}b-ok{% elif d.status == 'in_review' %}b-warn{% endif %}">{{ d.get_status_display }}</span>{% if d.current_version %} <span class="small muted">v{{ d.current_version.number }}</span>{% endif %}</td><td class="small">{{ d.get_source_display }}</td></tr>
+{% empty %}<tr><td colspan="5"><div class="empty">{% if q %}No approved documents match.{% else %}No documents yet.{% endif %}</div></td></tr>{% endfor %}</tbody></table>{% include "partials/pagination.html" %}</div>
+<div class="card"><h2>Awaiting review</h2>{% for v in pending %}<div><a href="{% url 'knowledge_detail' v.document_id %}">{{ v.document.title }}</a> <span class="small muted">v{{ v.number }}</span></div>{% empty %}<div class="muted small">Nothing pending.</div>{% endfor %}</div></div>
+{% endblock %}

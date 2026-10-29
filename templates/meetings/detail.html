@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}{{ m.code }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="mono muted">{{ m.code }} · {{ m.get_kind_display }}</div><h1>{{ m.title }}</h1>
+<div class="row"><span class="badge {% if m.status == 'completed' %}b-ok{% elif m.status == 'blocked' %}b-warn{% elif m.status == 'running' or m.status == 'queued' %}b-info{% endif %}">{{ m.get_status_display }}</span><span class="muted small">{{ m.status_reason }}</span></div></div>
+{% if manage %}<form method="post" action="{% url 'meeting_action' m.pk %}" class="row">{% csrf_token %}
+{% if m.status == "scheduled" or m.status == "blocked" or m.status == "cancelled" %}<button class="btn primary" name="action" value="queue">{% if m.attempt %}Run again{% else %}Start meeting{% endif %}</button>{% endif %}
+{% if m.status == "queued" or m.status == "running" or m.status == "scheduled" %}<button class="btn danger" name="action" value="cancel">Cancel</button>{% endif %}</form>{% endif %}</div>
+<div class="grid g3"><div class="span2 stack">
+{% if m.summary %}<div class="card" style="border-color:var(--accent)"><h2>Outcome</h2><div style="white-space:pre-wrap">{{ m.summary }}</div>
+<h3 style="margin-top:12px">Decisions</h3>{% for d in m.decisions %}<div>• {{ d }}</div>{% empty %}<div class="muted">None reached.</div>{% endfor %}
+<h3 style="margin-top:12px">Unresolved questions</h3>{% for q in m.unresolved_questions %}<div>• {{ q }}</div>{% empty %}<div class="muted">None.</div>{% endfor %}</div>
+<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Action items</h2>{% if manage and tasks %}<form method="post" action="{% url 'meeting_action' m.pk %}">{% csrf_token %}<button class="btn sm primary" name="action" value="queue_actions">Submit draft action items to the engine</button></form>{% endif %}</div>
+<p class="small muted">Action items are created as draft tasks; a person decides when they run.</p>
+{% for t in tasks %}<div><a href="{% url 'task_detail' t.pk %}">{{ t.code }} {{ t.title }}</a> <span class="badge {{ t.status|badge }}">{{ t.get_status_display }}</span> <span class="small muted">{{ t.assigned_employee.name }}{% if t.deadline %} · due {{ t.deadline|date:"Y-m-d" }}{% endif %}</span></div>{% empty %}<div class="muted small">None.</div>{% endfor %}</div>{% endif %}
+<div class="card"><h2>Transcript{% if m.attempt > 1 %} (attempt {{ m.attempt }}){% endif %}</h2>{% for t in turns %}<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div class="small"><strong>{{ t.employee.name }}</strong> <span class="muted">round {{ t.round }} · {{ t.model.display_name|default:"" }}{% if t.ready_to_conclude %} · ready to conclude{% endif %}</span></div><div style="white-space:pre-wrap">{{ t.content }}</div></div>{% empty %}<div class="muted small">No contributions yet.</div>{% endfor %}</div></div>
+<div class="stack"><div class="card"><h2>Brief</h2><div style="white-space:pre-wrap">{{ m.purpose }}</div><h3 style="margin-top:12px">Agenda</h3><ol style="margin:0;padding-left:18px">{% for a in m.agenda %}<li>{{ a }}</li>{% endfor %}</ol></div>
+<div class="card"><h2>Participants</h2>{% for p in participants %}<div>{{ p.name }} <span class="small muted">{{ p.job_title }}</span></div>{% endfor %}<div class="small" style="margin-top:6px">Facilitator: {{ m.facilitator.name }}</div>
+<dl class="kv small" style="margin-top:10px"><dt>Round limit</dt><dd>{{ m.max_rounds }}</dd><dt>Model calls</dt><dd>{{ m.model_calls }}</dd>{% if m.project %}<dt>Project</dt><dd><a href="{% url 'project_detail' m.project_id %}">{{ m.project.name }}</a></dd>{% endif %}</dl>
+{% if m.notes_document %}<p class="small"><a href="{% url 'knowledge_detail' m.notes_document_id %}">Meeting notes in knowledge base</a></p>{% endif %}</div></div></div>
+{% endblock %}
+{% block scripts %}{% if m.status == "running" or m.status == "queued" %}<script>setTimeout(() => location.reload(), 4000);</script>{% endif %}{% endblock %}

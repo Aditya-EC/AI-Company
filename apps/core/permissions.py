@@ -29,7 +29,9 @@ CEO_ALLOWED = {
     "manage_tasks",
     "view_projects",
     "manage_projects",
-    "decide_proposals",  # within ceo_approval_limit_usd; never staff-grantable
+    "decide_proposals",
+    "view_knowledge",
+    "manage_knowledge",  # within ceo_approval_limit_usd; never staff-grantable
     "review_tasks",
     "view_reports",
     "view_monitor",
@@ -105,3 +107,14 @@ def scope_queryset(user, perm, qs, dept_field="department", project_field="proje
     if proj_ids and project_field:
         cond |= Q(**{f"{project_field}__in": proj_ids})
     return qs.filter(cond)
+
+
+def has_company_scope(user, perm):
+    """True if the user holds `perm` company-wide (not merely for one department or project)."""
+    if not getattr(user, "is_authenticated", False) or not user.is_active:
+        return False
+    if user.is_founder:
+        return True
+    if user.is_ceo:
+        return perm in CEO_ALLOWED
+    return user.permission_assignments.filter(permission=perm, department__isnull=True, project__isnull=True).exists()

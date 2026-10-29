@@ -177,6 +177,7 @@ class Task(models.Model):
     estimated_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, null=True, blank=True)
     actual_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=Decimal("0"))
     deadline = models.DateTimeField(null=True, blank=True)
+    deadline_warned_at = models.DateTimeField(null=True, blank=True)
     # Results
     output = models.TextField(blank=True)
     error = models.TextField(blank=True)

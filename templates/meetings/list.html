@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Meetings{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>AI meetings</h1><div class="muted">Structured, bounded meetings. Each one ends with decisions and action items, or with an explicit blocker.</div></div></div>
+<div class="grid {% if form %}g3{% endif %}"><div class="card {% if form %}span2{% endif %} table-wrap"><table class="table"><thead><tr><th>Meeting</th><th>Kind</th><th>Status</th><th>Outcome</th><th>Created</th></tr></thead><tbody>
+{% for m in meetings %}<tr><td><a href="{% url 'meeting_detail' m.pk %}">{{ m.code }} {{ m.title }}</a><div class="small muted">facilitator {{ m.facilitator.name }}{% if m.project %} · {{ m.project.name }}{% endif %}</div></td><td class="small">{{ m.get_kind_display }}</td>
+<td><span class="badge {% if m.status == 'completed' %}b-ok{% elif m.status == 'blocked' %}b-warn{% elif m.status == 'running' or m.status == 'queued' %}b-info{% endif %}">{{ m.get_status_display }}</span></td><td class="small">{{ m.status_reason|truncatechars:80 }}</td><td class="small">{{ m.created_at|date:"Y-m-d H:i" }}</td></tr>
+{% empty %}<tr><td colspan="5"><div class="empty">No meetings yet.</div></td></tr>{% endfor %}</tbody></table></div>
+{% if form %}<div class="card"><h2>New meeting</h2><form method="post">{% csrf_token %}{% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}{% if field.errors %}<div class="errors">{{ field.errors|join:" " }}</div>{% endif %}</div>{% endfor %}
+<div class="row"><button class="btn primary" name="start" value="1">Create &amp; start</button><button class="btn" name="start" value="0">Create only</button></div></form></div>{% endif %}</div>
+{% endblock %}

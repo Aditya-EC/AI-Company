@@ -207,7 +207,7 @@ class CompanySettingsForm(StyledMixin, forms.ModelForm):
                   "default_max_runtime_seconds", "default_max_steps", "ceo_user", "ceo_employee", "ceo_approval_limit_usd",
                   "permitted_software_categories", "permitted_languages", "permitted_frameworks", "licensing_policy",
                   "testing_rules", "security_requirements", "deployment_restrictions", "repository_conventions",
-                  "web_allowed_domains"]
+                  "web_allowed_domains", "email_notifications_enabled"]
         widgets = {f: forms.Textarea(attrs={"rows": 3}) for f in
                    ["mission", "strategy", "development_standards", "licensing_policy", "testing_rules", "security_requirements",
                     "deployment_restrictions", "repository_conventions"]}

@@ -2,7 +2,7 @@
 
 A Django application in which a human **Founder** supervises a company of AI employees. All employees run on **one shared orchestration engine**, reach models through **one model gateway**, use tools only through a **default-deny tool registry**, and leave a **hash-chained audit trail**.
 
-Implemented so far: **Stage 1** (the secure foundation and the end-to-end vertical slice from spec §26) and **Stage 2 / Phase 6** (research proposals, CEO evaluation with Founder override, planning, project priorities and the Software Factory). Everything in the UI is wired to real backend behaviour. Features from later phases are not shown as placeholder buttons; they are listed under [Roadmap](#roadmap).
+Implemented so far: **Stage 1** (the secure foundation and the end-to-end vertical slice from spec §26), **Stage 2 / Phase 6** (research proposals, CEO evaluation with Founder override, planning, project priorities and the Software Factory), and **Stage 3 / Phase 7** (reports and exports, the knowledge base, AI meetings and notification preferences). Everything in the UI is wired to real backend behaviour. Features from later phases are not shown as placeholder buttons; they are listed under [Roadmap](#roadmap).
 
 ---
 
@@ -67,7 +67,9 @@ Budget (company|department|employee|project|provider × daily|monthly|total)   A
 | `apps/orchestration/` | the engine, the worker command, Celery tasks |
 | `apps/office/` | office state API, WebSocket consumer, office and monitor views |
 | `templates/`, `static/` | UI (light and dark themes, responsive) and the Three.js office |
-| `tests/` | 106 tests, including the full §26 scenario and the Phase 6 workflow |
+| `apps/knowledge/` | knowledge base (documents, versions, review rules, agent context) and AI meetings |
+| `apps/reports/` | report calculations, CSV/PDF export, export jobs |
+| `tests/` | 129 tests, including the full §26 scenario and the Phase 6–7 workflows |
 | `deploy/` | systemd units, nginx config, backup timer |
 
 ### Company workflow (Phase 6)
@@ -89,6 +91,28 @@ Release ─► readiness checklist from recorded evidence ─► Founder approva
 - **Test evidence:** `tests.run` and "Run tests on main" execute the unittest suite in the sandbox. A run counts as passing only with exit code 0 **and** a summary line carrying a per-run random nonce, so `os._exit(0)` or a printed fake summary doesn't pass. Agent-written tests can still be weak, which is why human review is still required.
 - **Release readiness** checks: repository exists, plan activated, all tasks completed, every reviewed deliverable accepted, and the test suite passed on the *current* `main` commit. An approved release is **authorized for deployment, not deployed**. Running deployments needs a deployment integration, which isn't included.
 - **Software policy** (Company settings): permitted categories, languages and frameworks, licensing, testing and security rules, repository conventions, web domain allowlist, and the CEO approval limit. Policies are given to planners and developers, and the category policy is enforced at approval.
+
+### Knowledge, meetings, reports and notifications (Phase 7)
+- **Knowledge base** (`apps/knowledge`):
+  - Versioned documents with access levels: company, department, project, or leadership (Founder and CEO only).
+  - Readers and agents only ever get a document's **approved** version. Anything written by an AI employee (`knowledge.propose`) or taken from an external source starts as a pending version.
+  - Policies, coding standards and procedures can only be approved by the **Founder**. Nobody but the Founder approves their own version.
+  - Agents get relevant approved documents automatically in their task context (scoped to their department and the task's project, never leadership), and can use `knowledge.search` / `knowledge.read`.
+- **AI meetings:**
+  - Each meeting has a purpose, agenda, 2–8 participants (each on its own model policy), a facilitator, a round limit (up to 4) and a call budget.
+  - Participants can end early by all signalling they're ready to conclude. The facilitator's outcome is validated (owners must be participants), with one correction attempt.
+  - A meeting with no decision or action ends as **blocked** with the reason recorded.
+  - Action items become **draft** tasks that a person submits. Notes are stored as a non-authoritative system record.
+  - Meetings run on the same engine workers (`run_engine` or Celery). They respect the emergency stop, and are recovered as blocked if their worker dies.
+- **Reports** (`/reports/`):
+  - Company, department, employee and financial / AI-usage reports, with date, department, project and employee filters.
+  - Export to CSV (with spreadsheet formula injection neutralized) or PDF.
+  - Access is checked server-side per report kind and **again at download**. Company and financial reports need company-wide `view_reports`.
+  - Employee performance is reported across several dimensions (output, review acceptance, rework, failures, timeliness, effort), never as one count-based score. Estimated costs are kept separate from verified billed costs.
+- **Notifications:**
+  - Per-user, per-kind in-app and email preferences. Security, provider-credential, approval and escalation notifications can't be switched off in-app.
+  - Email is sent only when the Founder enables it (Company settings) and is redacted.
+  - New triggers: budget at 80% (once per period), deadline risk (once per task), repeated tool denials (a security incident), CEO decisions (to the Founder), emergency stop.
 
 ---
 
@@ -151,7 +175,7 @@ See `.env.example` for the full list. The essentials:
 | `VCOOS_ALLOWED_HOSTS`, `VCOOS_CSRF_TRUSTED_ORIGINS` | host and origin allowlists |
 | `VCOOS_DB_ENGINE=postgres` + `VCOOS_DB_*` | PostgreSQL |
 | `VCOOS_REDIS_URL` | channel layer, cache (shared login rate limiting), Celery broker |
-| `VCOOS_WORKSPACE_ROOT`, `VCOOS_BACKUP_ROOT` | task workspaces and backups |
+| `VCOOS_WORKSPACE_ROOT`, `VCOOS_BACKUP_ROOT`, `VCOOS_REPORT_ROOT` | task workspaces, backups and report exports |
 | `VCOOS_SANDBOX_WRAPPER` | OS-level sandbox prefix for agent code (strongly recommended) |
 | `VCOOS_TASK_LEASE_SECONDS` | worker lease length (default 120) |
 
@@ -159,7 +183,7 @@ See `.env.example` for the full list. The essentials:
 
 ## 4. Tests
 ```bash
-pytest            # 106 tests, about 45 s
+pytest            # 129 tests, about 1 minute
 ```
 Coverage of spec §24: role and scoped permissions; unauthorized page, API and report access; model selection and fallback; rate limits, outages and backoff; invalid credentials; quota exhaustion; the circuit breaker; paid-model gating; budget enforcement; task retries, step limits and cancellation; dependency scheduling and cycle detection; recovery after a worker crash (idempotent and non-idempotent); approvals (CEO and Founder-only); tool grants, explicit deny, schema validation and path traversal; audit events and tamper detection; WebSocket auth and department filtering; sandbox isolation (network, filesystem, subprocess, ctypes, environment, timeout); prioritization and on-hold; report and budget calculations; sensitive Founder-only actions; exclusive claiming and concurrency limits; the emergency stop (before and during execution); backup, verification, tamper detection and restore; prompt-injection handling; and the full §26 scenario end to end through the HTTP views.
 
@@ -191,9 +215,8 @@ The adapters are tested over real HTTP against `tests/fake_llm.py`, a scripted t
 ---
 
 ## Roadmap
-Done here: **Phase 1** (foundation), **Phase 2** (engine), **Phase 3** (gateway), **Phase 4** (tool registry, permissions, sandbox, approvals, reviews, plus web.fetch, git.* and tests.run), **Phase 5** (3D office with a 2D fallback), and **Phase 6** (proposals, CEO and Founder governance, planning, priorities, Software Factory, releases).
+Done here: **Phase 1** (foundation), **Phase 2** (engine), **Phase 3** (gateway), **Phase 4** (tool registry, permissions, sandbox, approvals, reviews, plus web.fetch, git.* and tests.run), **Phase 5** (3D office with a 2D fallback), **Phase 6** (proposals, CEO and Founder governance, planning, priorities, Software Factory, releases), and **Phase 7** (reports, knowledge base, meetings, notifications).
 
 Next stages, building on the existing models and services:
 - **Phase 6+**: static analysis and dependency/licence scanning tools, project- and task-level tool-grant UI, deployment integrations (executing approved releases), structured AI meetings for architecture and release reviews.
-- **Phase 7**: reports with CSV/PDF export, the knowledge base, AI meetings, notification preferences.
 - **Phase 8**: load testing, query optimization, further hardening.

@@ -135,12 +135,52 @@ def next_queued_ids(limit):
     return list(Task.objects.filter(status=T.QUEUED).exclude(priority=9).order_by("priority", "queued_at", "id").values_list("id", flat=True)[: limit * 5])
 
 
+def warn_deadlines(now=None):
+    """Notify once when an open task is within 24h of (or past) its deadline."""
+    now = now or timezone.now()
+    risky = Task.objects.exclude(status__in=T.TERMINAL).filter(deadline__isnull=False, deadline__lte=now + timedelta(hours=24),
+                                                               deadline_warned_at__isnull=True)
+    warned = []
+    for task in risky.select_related("created_by"):
+        if Task.objects.filter(pk=task.pk, deadline_warned_at__isnull=True).update(deadline_warned_at=now):
+            state = "is overdue" if task.deadline < now else "is due within 24 hours"
+            body = f"Status: {task.get_status_display()}. {task.status_reason}"[:300]
+            notify_leadership("deadline", f"Deadline risk: {task.code} {state}", body, f"/tasks/{task.pk}/")
+            if task.created_by and not (task.created_by.is_founder or task.created_by.is_ceo):
+                notify_user(task.created_by, "deadline", f"Deadline risk: {task.code} {state}", body, f"/tasks/{task.pk}/")
+            warned.append(task.pk)
+    return warned
+
+
+def claim_meetings(worker_id, limit=1):
+    from apps.knowledge.meetings import claim_meeting
+    from apps.knowledge.models import Meeting
+
+    claimed = []
+    for mid in Meeting.objects.filter(status=Meeting.QUEUED).order_by("created_at").values_list("id", flat=True)[:limit]:
+        m = claim_meeting(mid, worker_id)
+        if m:
+            claimed.append(m)
+    return claimed
+
+
+def run_meeting(meeting, worker_id, sleep=None):
+    from apps.knowledge.meetings import run_meeting as _run
+
+    return _run(meeting, worker_id, sleep=sleep)
+
+
 def tick(worker_id, run=True):
-    """One scheduler pass: recover, unblock, claim (and optionally run) work up to capacity."""
+    """One scheduler pass: recover, unblock, warn, claim (and optionally run) work up to capacity.
+    Returns the ids of claimed tasks; when run=True, queued meetings are also run."""
     if CompanySettings.get().emergency_stop:
         return []
+    from apps.knowledge.meetings import recover_meetings
+
     recover_interrupted()
+    recover_meetings()
     unblock_ready_tasks()
+    warn_deadlines()
     claimed = []
     capacity = _capacity_available()
     for tid in next_queued_ids(capacity):
@@ -152,6 +192,8 @@ def tick(worker_id, run=True):
     if run:
         for tid in claimed:
             execute_task(tid, worker_id)
+        for meeting in claim_meetings(worker_id):
+            run_meeting(meeting, worker_id)
     return claimed
 
 
@@ -187,6 +229,12 @@ def build_messages(task, employee, tools):
         f"COMPANY DEVELOPMENT STANDARDS:\n{company.development_standards}" if company.development_standards else "",
     ]))
     extra = [OUTPUT_FORMATS.get(task.output_kind, "")]
+    from apps.knowledge.services import context_for_task
+
+    docs = context_for_task(employee, task)
+    if docs:
+        extra.append("RELEVANT APPROVED COMPANY KNOWLEDGE (follow policies and standards; cite by title):\n" + "\n\n".join(
+            f"[{d['category']}] {d['title']} (v{d['version']}):\n{d['content']}" for d in docs))
     if task.project_id and task.project.has_repository:
         extra.append(REPO_NOTE.format(project=task.project.name, branch=task.branch_name or f"task-{task.pk}"))
         policy = [("Permitted languages", ", ".join(company.permitted_languages)),
@@ -256,6 +304,21 @@ def parse_agent_reply(text):
     raise GatewayError(GatewayError.INVALID_OUTPUT, "JSON missing a valid 'action'")
 
 
+DENIAL_INCIDENT_THRESHOLD = 3
+
+
+def _security_incident(task, employee, execution):
+    """Repeated attempts to use unpermitted tools may indicate prompt injection or a misconfigured role."""
+    from apps.core.models import Incident
+
+    tools = list(ToolCall.objects.filter(execution=execution, allowed=False).values_list("tool_slug", flat=True))
+    Incident.objects.create(title=f"Repeated unpermitted tool use by {employee.name} on {task.code}", severity="medium",
+                            category="security", related_task=task,
+                            description=f"Denied tools in execution {execution.pk}: {', '.join(tools)}. Possible prompt injection.")
+    notify_leadership("security", f"Security: repeated tool denials on {task.code}", f"{employee.name}: {', '.join(tools)}",
+                      f"/tasks/{task.pk}/")
+
+
 class StopExecution(Exception):
     def __init__(self, status, reason):
         self.status, self.reason = status, reason
@@ -312,6 +375,7 @@ def execute_task(task_id, worker_id, sleep=None):
     ctx = registry.ToolContext(task=task, employee=employee, execution=execution)
     route_kwargs = {"sleep": sleep} if sleep else {}
     final = None
+    denials = 0
     try:
         for step in range(1, task.max_steps + 1):
             _checkpoint(task, execution, worker_id, deadline)
@@ -346,6 +410,9 @@ def execute_task(task_id, worker_id, sleep=None):
             else:
                 ok, out, ms = False, {"error": f"permission denied: {reason}"}, 0
                 audit.record("tool.denied", employee=employee, target=task, details={"tool": slug, "reason": reason})
+                denials += 1
+                if denials == DENIAL_INCIDENT_THRESHOLD:
+                    _security_incident(task, employee, execution)
             summary = registry.summarize(out)
             ToolCall.objects.create(execution=execution, tool_slug=slug[:80], input_data=data, output_summary=summary,
                                     allowed=allowed, denial_reason="" if allowed else reason, success=ok,
