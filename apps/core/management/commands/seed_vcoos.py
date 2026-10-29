@@ -3,7 +3,7 @@ from django.utils.text import slugify
 
 from apps.core import audit
 from apps.core.models import CompanySettings, Department, RoleTemplate
-from apps.core.roles import DEPARTMENTS, ROLES
+from apps.core.roles import DEPARTMENTS, PROJECT_TEMPLATES, ROLES
 from apps.tools.registry import sync_definitions
 
 
@@ -23,7 +23,12 @@ class Command(BaseCommand):
                                              system_instructions=f"You are a {name}. {desc}", required_capabilities=["json"]))
                 n += created
         sync_definitions()
-        self.stdout.write(f"Role templates installed ({n} new). Tool definitions synced.")
+        from apps.work.models import ProjectTemplate
+
+        for category, name, milestones, stack in PROJECT_TEMPLATES:
+            ProjectTemplate.objects.get_or_create(category=category, defaults=dict(name=name, default_milestones=milestones,
+                                                                                    default_stack=stack))
+        self.stdout.write(f"Role templates installed ({n} new). Tool definitions and project templates synced.")
         if with_departments:
             for i, (name, desc, color) in enumerate(DEPARTMENTS):
                 Department.objects.get_or_create(slug=slugify(name), defaults=dict(

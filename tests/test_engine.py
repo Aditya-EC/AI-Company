@@ -233,7 +233,7 @@ def test_auto_assignment_by_skill_and_load(dept, company, local_model):
     coder = EmployeeProfile.objects.create(name="Coder", job_title="Dev", department=dept, skills=["python"])
     for e in (writer, coder):
         EmployeeModelPolicy.objects.create(employee=e, model=local_model, priority=1)
-    task = make_task(dept, None, required_capabilities=["python"])
+    task = make_task(dept, None, required_skills=["python"])
     assert engine.select_employee(task) == coder
 
 

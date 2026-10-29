@@ -45,7 +45,7 @@ def select_employee(task):
                   load=Count("tasks", filter=Q(tasks__status__in=[T.RUNNING, T.QUEUED]), distinct=True))
         .filter(policies__gt=0)
     )
-    wanted = {s.lower() for s in task.required_capabilities}
+    wanted = {s.lower() for s in task.required_skills}
     ranked = sorted(candidates, key=lambda e: (-len(wanted & {s.lower() for s in e.skills}), e.load, e.pk))
     return ranked[0] if ranked else None
 
@@ -186,8 +186,54 @@ def build_messages(task, employee, tools):
         f"DEPARTMENT INSTRUCTIONS:\n{employee.department.instructions}" if employee.department.instructions else "",
         f"COMPANY DEVELOPMENT STANDARDS:\n{company.development_standards}" if company.development_standards else "",
     ]))
+    extra = [OUTPUT_FORMATS.get(task.output_kind, "")]
+    if task.project_id and task.project.has_repository:
+        extra.append(REPO_NOTE.format(project=task.project.name, branch=task.branch_name or f"task-{task.pk}"))
+        policy = [("Permitted languages", ", ".join(company.permitted_languages)),
+                  ("Permitted frameworks", ", ".join(company.permitted_frameworks)),
+                  ("Licensing policy", company.licensing_policy), ("Testing rules", company.testing_rules),
+                  ("Security requirements", company.security_requirements), ("Repository conventions", company.repository_conventions)]
+        if any(v for _, v in policy):
+            extra.append("SOFTWARE POLICY:\n" + "\n".join(f"- {k}: {v}" for k, v in policy if v))
     user = f"TASK {task.code}: {task.title}\n\nDESCRIPTION:\n{task.description}\n\nACCEPTANCE CRITERIA:\n{task.acceptance_criteria or '(none specified)'}"
-    return [{"role": "system", "content": system + "\n\n" + persona}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": "\n\n".join(filter(None, [system, persona, *extra]))}, {"role": "user", "content": user}]
+
+
+OUTPUT_FORMATS = {
+    Task.PROPOSAL: """FINAL OUTPUT FOR THIS TASK: your final JSON must also contain "proposal": {
+  "title", "problem_statement", "target_users", "market_research", "technical_feasibility", "validation_plan",
+  "revenue_hypothesis", "software_category" (text fields), "proposed_features", "recommended_stack", "risks",
+  "assumptions", "uncertainties" (lists of strings), "evidence": [{"claim": "...", "source_url": "https://..."}],
+  "estimated_effort_days" (number), "estimated_cost_usd" (number or null), "confidence" (0-100)}.
+Only cite a source_url you actually retrieved with web.fetch in this task; anything not supported by a retrieved
+source belongs in "assumptions". The system marks which sources were really retrieved.""",
+    Task.PLAN: """FINAL OUTPUT FOR THIS TASK: your final JSON must also contain "plan": {
+  "milestones": [{"name": "...", "due_in_days": 14}],
+  "tasks": [{"key": "short-id", "title": "...", "description": "...", "acceptance_criteria": "testable criteria",
+             "department": "<exact department name>", "milestone": "<milestone name>", "depends_on": ["other-key"],
+             "skills": ["python"], "requires_review": true}]}
+Keys must be unique, dependencies must reference keys in the plan and must not form a cycle.""",
+}
+
+REPO_NOTE = """REPOSITORY: you are working in branch {branch} of the {project} repository. workspace.* tools read and write files
+in this branch only. Use git.commit to save progress, git.diff to inspect changes, tests.run to run the unittest suite
+(files named test*.py). Your branch is merged to main only after a reviewer accepts it. Do not claim tests pass unless
+tests.run reported it."""
+
+
+def validate_final_payload(task, reply):
+    """Validate kind-specific final payloads. Returns cleaned data or raises ValueError (fed back to the agent)."""
+    if task.output_kind == Task.PROPOSAL:
+        from apps.work.proposals import validate_payload
+
+        return validate_payload(reply.get("proposal"))
+    if task.output_kind == Task.PLAN:
+        from apps.work.projects import validate_plan
+
+        if not task.project_id:
+            raise ValueError("planning task has no project")
+        return validate_plan(task.project, reply.get("plan"))
+    return None
 
 
 def parse_agent_reply(text):
@@ -231,6 +277,11 @@ def _checkpoint(task, execution, worker_id, deadline):
     emp.refresh_from_db(fields=["status"])
     if emp.status != EmployeeProfile.ACTIVE:
         raise StopExecution(T.PAUSED, f"employee {emp.status}")
+    if task.project_id:
+        from apps.work.models import Project
+
+        if Project.objects.filter(pk=task.project_id, status=Project.PAUSED).exists():
+            raise StopExecution(T.PAUSED, "project paused")
     if timezone.now() > deadline:
         raise StopExecution(T.FAILED, "maximum runtime exceeded")
     Task.objects.filter(pk=task.pk, lease_owner=worker_id).update(
@@ -273,6 +324,15 @@ def execute_task(task_id, worker_id, sleep=None):
             messages.append({"role": "assistant", "content": result.text})
             step_rec = {"step": step, "model": str(result.model), "action": reply["action"], "at": timezone.now().isoformat()}
             if reply["action"] == "final":
+                try:
+                    reply["_payload"] = validate_final_payload(task, reply)
+                except ValueError as exc:
+                    step_rec.update(action="final_rejected", summary=f"invalid {task.output_kind}: {exc}"[:500])
+                    execution.steps = execution.steps + [step_rec]
+                    execution.save(update_fields=["steps", "routing_log", "model_used"])
+                    messages.append({"role": "user", "content": f"Your final output was rejected by validation: {exc}. "
+                                                                "Correct it and reply with the complete final JSON."})
+                    continue
                 step_rec["summary"] = str(reply.get("summary", ""))[:500]
                 execution.steps = execution.steps + [step_rec]
                 final = reply
@@ -316,20 +376,50 @@ def _task_cost(task):
     return task.usage.aggregate(c=Sum("estimated_cost_usd"))["c"] or Decimal("0")
 
 
+def _commit_branch(task, execution):
+    """Capture any uncommitted work on the task branch so review sees exactly what will be merged."""
+    if not (task.project_id and task.project.has_repository) or task.output_kind != Task.DELIVERABLE:
+        return None
+    from apps.work import repo
+
+    path = repo.ensure_worktree(task)
+    sha = repo.commit_all(path, f"{task.code}: deliverable (attempt {execution.attempt_number})", task.assigned_employee)
+    head = repo.head(path)
+    return {"branch": task.branch_name, "sha": head, "new_commit": sha is not None}
+
+
 def _finish_success(task, execution, final):
     output = final["output"]
     assumptions = final.get("assumptions") or []
     if assumptions:
         output += "\n\nASSUMPTIONS (unverified):\n" + "\n".join(f"- {a}" for a in assumptions)
+    commit = _commit_branch(task, execution)
+    if commit:
+        output += f"\n\nBRANCH: {commit['branch']} @ {commit['sha'][:12]}"
+    created = None
     with transaction.atomic():
         execution.status, execution.finished_at = TaskExecution.SUCCEEDED, timezone.now()
         execution.save()
         Artifact.objects.create(task=task, execution=execution, employee=task.assigned_employee,
                                 name=f"{task.code} deliverable (attempt {execution.attempt_number})", kind="text", content=output)
-        target = T.UNDER_REVIEW if task.requires_review else T.COMPLETED
+        if commit:
+            Artifact.objects.create(task=task, execution=execution, employee=task.assigned_employee, kind="commit",
+                                    name=f"{commit['branch']} @ {commit['sha'][:12]}", content=commit["sha"])
+        if task.output_kind == Task.PROPOSAL:
+            from apps.work.proposals import create_from_agent
+
+            created = create_from_agent(task, final["_payload"])
+            output += f"\n\nPROPOSAL: {created.code} submitted for evaluation"
+        elif task.output_kind == Task.PLAN:
+            from apps.work.projects import materialize_plan
+
+            created = materialize_plan(task.project, final["_payload"], source_task=task)
+            output += f"\n\nPLAN: {len(created)} draft tasks created; awaiting activation"
+        review = task.requires_review and task.output_kind == Task.DELIVERABLE
+        target = T.UNDER_REVIEW if review else T.COMPLETED
         services.transition(task, target, employee=task.assigned_employee, reason=str(final.get("summary", "deliverable submitted"))[:300],
                             extra={"output": output, "error": "", "actual_cost_usd": _task_cost(task),
-                                   "progress_note": "deliverable submitted for review" if task.requires_review else "completed"})
+                                   "progress_note": "deliverable submitted for review" if review else "completed"})
     if target == T.UNDER_REVIEW:
         notify_user(task.reviewer or task.created_by, "review", f"{task.code} ready for review", task.title, f"/tasks/{task.pk}/")
     else:

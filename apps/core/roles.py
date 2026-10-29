@@ -64,3 +64,16 @@ DEPARTMENTS = [
     ("Operations & HR", "Operations and people.", "#84cc16"),
     ("Infrastructure & DevOps", "CI/CD and infrastructure.", "#0ea5e9"),
 ]
+
+PROJECT_TEMPLATES = [
+    ("web_app", "Django / web application", ["Requirements", "Architecture & data model", "Core features", "Testing", "Release"], ["Python", "Django", "PostgreSQL"]),
+    ("saas", "SaaS platform", ["Requirements", "Multi-tenant architecture", "Billing & accounts", "Core features", "Testing", "Release"], ["Python", "Django", "PostgreSQL", "Redis"]),
+    ("api", "REST API / backend service", ["API design", "Implementation", "Testing", "Documentation", "Release"], ["Python", "Django REST framework"]),
+    ("desktop", "Desktop application", ["Requirements", "UI design", "Implementation", "Packaging", "Release"], ["Python", "Qt"]),
+    ("engineering", "Engineering software", ["Requirements", "Numerical methods", "Implementation", "Validation", "Release"], ["Python", "NumPy", "SciPy"]),
+    ("data_analysis", "Data analysis application", ["Data sources", "Analysis pipeline", "Reporting", "Testing", "Release"], ["Python", "pandas"]),
+    ("ai_app", "AI-enabled application", ["Requirements", "Model gateway integration", "Evaluation set", "Core features", "Testing", "Release"], ["Python"]),
+    ("automation", "Automation tool", ["Requirements", "Implementation", "Testing", "Release"], ["Python"]),
+    ("simulation", "Simulation application", ["Model definition", "Solver", "Visualization", "Validation", "Release"], ["Python", "NumPy"]),
+    ("internal_tool", "Internal business utility", ["Requirements", "Implementation", "Testing", "Release"], ["Python", "Django"]),
+]

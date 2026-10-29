@@ -13,6 +13,12 @@ from .fake_llm import FakeLLMServer
 PASSWORD = "Str0ng-Test-Passw0rd!"
 
 
+@pytest.fixture(autouse=True)
+def isolated_workspace(settings, tmp_path):
+    """Fresh workspace root per test (SQLite reuses primary keys after rollback)."""
+    settings.VCOOS_WORKSPACE_ROOT = tmp_path / "workspaces"
+
+
 @pytest.fixture
 def llm():
     server = FakeLLMServer()

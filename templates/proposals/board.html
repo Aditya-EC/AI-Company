@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Proposals{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Project proposals</h1><div class="muted">Research agents propose; the CEO evaluates within their authority; the Founder can override any decision.</div></div>
+{% if manage %}<a class="btn" href="{% url 'proposal_create' %}">Write a proposal</a>{% endif %}</div>
+<div class="grid {% if research_form %}g3{% endif %}">
+<div class="{% if research_form %}span2{% endif %}"><div class="board" style="grid-template-columns:repeat(4,minmax(200px,1fr))">
+{% for name, items in columns %}<div class="col"><h3>{{ name }} <span class="muted">{{ items|length }}</span></h3>
+{% for p in items %}<a class="tcard" href="{% url 'proposal_detail' p.pk %}"><div class="row" style="justify-content:space-between"><span class="mono small muted">{{ p.code }}</span><span class="badge {{ p.status|badge }}">{{ p.get_status_display }}</span></div>
+<div class="t">{{ p.title|truncatechars:70 }}</div><div class="small muted">{% if p.proposed_by %}{{ p.proposed_by.name }}{% else %}human-authored{% endif %}{% if p.estimated_cost_usd is not None %} · est. ${{ p.estimated_cost_usd }}{% endif %}{% if p.confidence is not None %} · {{ p.confidence }}% conf.{% endif %}</div></a>
+{% empty %}<div class="muted small" style="padding:8px">None</div>{% endfor %}</div>{% endfor %}</div></div>
+{% if research_form %}<div class="stack"><div class="card"><h2>Commission research</h2><p class="muted small">Creates a research task. The researcher's structured proposal lands on this board.</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="commission">{% include "partials/form_fields.html" with form=research_form %}<button class="btn primary">Commission research</button></form></div>
+<div class="card"><h2>Research in progress</h2>{% for t in research_tasks %}<div><a href="{% url 'task_detail' t.pk %}">{{ t.code }}</a> <span class="badge {{ t.status|badge }}">{{ t.get_status_display }}</span><div class="small muted">{{ t.title|truncatechars:60 }} · {{ t.assigned_employee.name|default:"unassigned" }}</div></div>{% empty %}<div class="muted small">None.</div>{% endfor %}</div></div>{% endif %}
+</div>{% endblock %}

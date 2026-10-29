@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="mono muted">{{ project.code }}{% if project.proposal %} · from <a href="{% url 'proposal_detail' project.proposal_id %}">P-{{ project.proposal_id }}</a>{% endif %}</div><h1>{{ project.name }}</h1>
+<div class="row"><span class="badge {% if project.status == 'active' %}b-ok{% elif project.status == 'paused' %}b-warn{% else %}b-info{% endif %}">{{ project.get_status_display }}</span><span class="badge">{{ project.get_priority_display }} priority</span><span class="badge b-purple">{{ project.get_plan_status_display }}</span>{% if project.category %}<span class="muted small">{{ project.category }}</span>{% endif %}</div></div>
+{% if manage and project.status != "cancelled" and project.status != "completed" %}<form method="post" action="{% url 'project_action' project.pk %}" class="row">{% csrf_token %}
+{% if project.plan_status == "proposed" %}<button class="btn primary" name="action" value="activate_plan" data-confirm="Activate the plan and submit all its tasks to the engine?">Activate plan</button>{% endif %}
+{% if project.status == "paused" %}<button class="btn" name="action" value="resume">Resume</button>{% else %}<button class="btn" name="action" value="pause" data-confirm="Pause the project? Running tasks stop at their next safe checkpoint.">Pause</button>{% endif %}
+<button class="btn" name="action" value="complete">Mark complete</button>
+<button class="btn danger" name="action" value="cancel" data-confirm="Cancel the project and all its open tasks?">Cancel project</button></form>{% endif %}</div>
+
+<div class="grid g4" style="margin-bottom:16px">
+<div class="card stat"><div class="label">Tasks completed</div><div class="value">{{ done }} / {{ total }}</div></div>
+<div class="card stat"><div class="label">Milestones</div><div class="value">{{ milestones|length }}</div></div>
+<div class="card stat"><div class="label">Repository</div><div class="value" style="font-size:16px">{% if project.has_repository %}{{ branches|length }} branch{{ branches|length|pluralize:"es" }}{% else %}none{% endif %}</div></div>
+<div class="card stat"><div class="label">Release readiness</div><div class="value" style="font-size:16px">{% if readiness %}{% if readiness.ready %}<span class="badge b-ok">ready</span>{% else %}<span class="badge b-warn">not ready</span>{% endif %}{% else %}—{% endif %}</div></div></div>
+
+<div class="tabs" data-tabs="prj"><button class="active" data-tab="plan">Plan</button>{% if project.has_repository %}<button data-tab="repo">Repository &amp; tests</button><button data-tab="release">Releases</button>{% endif %}<button data-tab="decisions">Decisions</button></div>
+
+<div class="tab-panel" data-tab-panel="prj" data-name="plan"><div class="grid g3"><div class="card span2 table-wrap"><h2>Plan</h2>
+{% for t in planning_tasks %}<p class="small">Planning task <a href="{% url 'task_detail' t.pk %}">{{ t.code }}</a> <span class="badge {{ t.status|badge }}">{{ t.get_status_display }}</span></p>{% endfor %}
+<table class="table"><thead><tr><th>Task</th><th>Milestone</th><th>Department</th><th>Depends on</th><th>Status</th></tr></thead><tbody>
+{% for t in plan_tasks %}<tr><td><a href="{% url 'task_detail' t.pk %}">{{ t.code }} {{ t.title }}</a><div class="small muted">{{ t.assigned_employee.name|default:"engine will assign" }}{% if t.branch_name %} · <span class="mono">{{ t.branch_name }}</span>{% endif %}</div></td><td class="small">{{ t.milestone.name|default:"—" }}</td><td class="small">{{ t.department.name }}</td>
+<td class="small">{% for d in t.dependencies.all %}{{ d.depends_on.code }} {% empty %}—{% endfor %}</td><td><span class="badge {{ t.status|badge }}">{{ t.get_status_display }}</span></td></tr>
+{% empty %}<tr><td colspan="5"><div class="empty">{% if project.plan_status == "in_progress" %}A planner is drafting the plan.{% else %}No tasks yet.{% endif %}</div></td></tr>{% endfor %}</tbody></table></div>
+<div class="stack">{% if manage %}<div class="card"><h2>Priority</h2><p class="small muted">Cascades to every open task. Running work is not interrupted.</p><form method="post" action="{% url 'project_action' project.pk %}">{% csrf_token %}<input type="hidden" name="action" value="priority">{% for field in priority_form %}<div class="field"><label>{{ field.label }}</label>{{ field }}</div>{% endfor %}<button class="btn primary">Change priority</button></form></div>{% endif %}
+<div class="card"><h2>Milestones</h2>{% for m in milestones %}<div>{{ m.name }} <span class="muted small">{{ m.due_date|default:"" }}</span></div>{% empty %}<div class="muted small">None.</div>{% endfor %}</div>
+<div class="card"><h2>About</h2><div class="small" style="white-space:pre-wrap">{{ project.description|truncatechars:800 }}</div><dl class="kv small" style="margin-top:8px"><dt>Department</dt><dd>{{ project.department.name|default:"—" }}</dd><dt>Budget</dt><dd>{% if project.budget_usd %}${{ project.budget_usd }}{% else %}—{% endif %}</dd><dt>Template</dt><dd>{{ project.template.name|default:"—" }}</dd></dl></div></div></div></div>
+
+{% if project.has_repository %}
+<div class="tab-panel" data-tab-panel="prj" data-name="repo" hidden><div class="grid g2">
+<div class="card table-wrap"><h2>main — recent commits</h2><table class="table small"><tbody>{% for c in log %}<tr><td class="mono">{{ c.sha|slice:":10" }}</td><td>{{ c.subject }}</td><td class="muted">{{ c.author }}</td></tr>{% empty %}<tr><td class="muted">No commits.</td></tr>{% endfor %}</tbody></table>
+<h2 style="margin-top:16px">Branches</h2>{% for b in branches %}<div class="small"><span class="mono">{{ b.name }}</span> {{ b.sha }} <span class="muted">{{ b.subject|truncatechars:60 }}</span></div>{% endfor %}</div>
+<div class="card table-wrap"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Test runs</h2>{% if manage %}<form method="post" action="{% url 'project_action' project.pk %}">{% csrf_token %}<button class="btn sm primary" name="action" value="run_tests">Run tests on main</button></form>{% endif %}</div>
+<p class="small muted">Results come from the sandboxed test runner's exit code and summary — not from agent statements.</p>
+{% for r in test_runs %}<details style="margin-bottom:8px"><summary>#{{ r.pk }} {% if r.passed %}<span class="badge b-ok">passed</span>{% else %}<span class="badge b-bad">failed</span>{% endif %} <span class="mono small">{{ r.ref }} {{ r.commit_sha|slice:":10" }}{% if r.dirty %} (uncommitted changes){% endif %}</span> <span class="muted small">{{ r.tests_run|default:"0" }} tests · {{ r.triggered_by }} · {{ r.created_at|date:"H:i" }}</span></summary><pre class="small">{{ r.output|truncatechars:6000 }}</pre></details>
+{% empty %}<div class="muted small">No test runs yet.</div>{% endfor %}</div></div></div>
+
+<div class="tab-panel" data-tab-panel="prj" data-name="release" hidden><div class="grid g3"><div class="card"><h2>Readiness checklist</h2>{% for i in readiness.items %}<div class="row" style="align-items:flex-start;margin-bottom:6px;flex-wrap:nowrap"><span class="badge {% if i.ok %}b-ok{% else %}b-bad{% endif %}">{% if i.ok %}✓{% else %}✗{% endif %}</span><div style="flex:1;min-width:0"><div>{{ i.label }}</div>{% if i.detail %}<div class="small muted">{{ i.detail }}</div>{% endif %}</div></div>{% endfor %}
+<p class="small muted">Deployment executes only through a configured deployment integration (not part of this release). An approved release is authorized, not deployed.</p></div>
+<div class="card span2 table-wrap"><h2>Releases</h2><table class="table"><tbody>{% for r in releases %}<tr><td><strong>v{{ r.version }}</strong> <span class="mono small muted">{{ r.commit_sha|slice:":10" }}</span><div class="small" style="white-space:pre-wrap">{{ r.release_notes|truncatechars:300 }}</div>{% if r.known_issues %}<div class="small muted">Known issues: {{ r.known_issues|truncatechars:200 }}</div>{% endif %}</td>
+<td><span class="badge {% if r.status == 'approved' %}b-ok{% elif r.status == 'rejected' %}b-bad{% elif r.status == 'awaiting_approval' %}b-purple{% endif %}">{{ r.get_status_display }}</span></td>
+<td>{% if manage and r.status == "draft" or manage and r.status == "rejected" %}<form method="post" action="{% url 'project_action' project.pk %}">{% csrf_token %}<input type="hidden" name="release" value="{{ r.pk }}"><button class="btn sm" name="action" value="request_release" {% if not readiness.ready %}disabled title="Readiness checks not satisfied"{% endif %}>Request Founder approval</button></form>{% endif %}</td></tr>
+{% empty %}<tr><td><div class="empty">No releases yet.</div></td></tr>{% endfor %}</tbody></table>
+{% if manage %}<h2 style="margin-top:16px">Draft a release</h2><form method="post" action="{% url 'project_action' project.pk %}">{% csrf_token %}<input type="hidden" name="action" value="create_release">{% include "partials/form_fields.html" with form=release_form %}<button class="btn primary">Draft release</button></form>{% endif %}</div></div></div>
+{% endif %}
+
+<div class="tab-panel" data-tab-panel="prj" data-name="decisions" hidden><div class="card"><h2>Decision log</h2><ul class="timeline small">{% for d in decisions %}<li><strong>{{ d.get_kind_display }}: {{ d.outcome }}</strong> by {{ d.made_by.username }} ({{ d.authority }}) <span class="muted">{{ d.created_at|date:"Y-m-d H:i" }}</span>{% if d.rationale %}<div>{{ d.rationale }}</div>{% endif %}{% if d.effects %}<div class="mono muted">{{ d.effects }}</div>{% endif %}</li>{% empty %}<li class="muted">No decisions recorded.</li>{% endfor %}</ul></div></div>
+{% endblock %}

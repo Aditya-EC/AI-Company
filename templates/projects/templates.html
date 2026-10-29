@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}Software Factory templates{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Software Factory templates</h1><div class="muted">Templates guide planning. Permitted categories, languages and policies live in Company settings.</div></div></div>
+<div class="grid {% if form %}g3{% endif %}"><div class="card {% if form %}span2{% endif %} table-wrap"><table class="table"><thead><tr><th>Template</th><th>Category key</th><th>Default milestones</th><th>Stack</th><th>Repository</th></tr></thead><tbody>
+{% for t in templates %}<tr><td><strong>{{ t.name }}</strong><div class="muted small">{{ t.description }}</div></td><td class="mono small">{{ t.category }}</td><td class="small">{{ t.default_milestones|join:" → " }}</td><td class="small">{{ t.default_stack|join:", " }}</td><td>{{ t.uses_repository|yesno }}</td></tr>
+{% empty %}<tr><td colspan="5"><div class="empty">No templates. Run <code>manage.py seed_vcoos</code>.</div></td></tr>{% endfor %}</tbody></table></div>
+{% if form %}<div class="card"><h2>New template</h2><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Create template</button></form></div>{% endif %}</div>
+{% endblock %}

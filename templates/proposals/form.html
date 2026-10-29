@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block title %}New proposal{% endblock %}
+{% block content %}<div class="page-head"><div><h1>Write a proposal</h1><div class="muted">Human-authored proposals go through the same evaluation. List fields take one item per line.</div></div></div>
+<div class="card"><form method="post">{% csrf_token %}{% include "partials/form_fields.html" %}<button class="btn primary">Submit for evaluation</button></form></div>{% endblock %}

@@ -30,6 +30,19 @@ class FakeLLMServer:
                 self.wfile.write(data)
 
             def do_GET(self):
+                if self.path.startswith("/page"):
+                    body = b"<html><head><script>steal()</script></head><body><h1>Market report</h1><p>Tutoring market grew 12%.</p></body></html>"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    return self.wfile.write(body)
+                if self.path == "/redirect-internal":
+                    self.send_response(302)
+                    self.send_header("Location", "http://169.254.169.254/latest/meta-data/")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
                 if self.path == "/api/tags":
                     return self._send(200, {"models": [{"name": n} for n in server.tags]})
                 if self.path.endswith("/models"):

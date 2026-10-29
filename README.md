@@ -2,7 +2,7 @@
 
 A Django application in which a human **Founder** supervises a company of AI employees. All employees run on **one shared orchestration engine**, reach models through **one model gateway**, use tools only through a **default-deny tool registry**, and leave a **hash-chained audit trail**.
 
-This release is **Stage 1: the secure foundation plus the end-to-end vertical slice** from spec §26. Everything in the UI is wired to real backend behaviour. Features from later phases are not shown as placeholder buttons; they are listed under [Roadmap](#roadmap).
+Implemented so far: **Stage 1** (the secure foundation and the end-to-end vertical slice from spec §26) and **Stage 2 / Phase 6** (research proposals, CEO evaluation with Founder override, planning, project priorities and the Software Factory). Everything in the UI is wired to real backend behaviour. Features from later phases are not shown as placeholder buttons; they are listed under [Roadmap](#roadmap).
 
 ---
 
@@ -67,8 +67,28 @@ Budget (company|department|employee|project|provider × daily|monthly|total)   A
 | `apps/orchestration/` | the engine, the worker command, Celery tasks |
 | `apps/office/` | office state API, WebSocket consumer, office and monitor views |
 | `templates/`, `static/` | UI (light and dark themes, responsive) and the Three.js office |
-| `tests/` | 78 tests, including the full §26 scenario |
+| `tests/` | 106 tests, including the full §26 scenario and the Phase 6 workflow |
 | `deploy/` | systemd units, nginx config, backup timer |
+
+### Company workflow (Phase 6)
+```
+Founder strategy ─► Commission research (task, output_kind=proposal)
+                     └─ researcher uses web.fetch ─► structured proposal (validated; invalid output is sent back to the same model)
+                          evidence marked "retrieved" only if the system saw the fetch
+CEO evaluates ─► approve (≤ ceo_approval_limit_usd, needs a cost estimate) / reject / defer / revision / escalate
+Founder ─► decides escalations, can override any decision (recorded as an override; reversing an approval cancels the project)
+Approval ─► Project (+ Git repository) + planning task (output_kind=plan)
+Planner ─► milestones + tasks + dependencies (validated: departments, keys, cycles, acceptance criteria) ─► draft tasks
+CEO/Founder ─► activate plan ─► tasks queued or blocked on dependencies
+Developers ─► work on branch task-<id> in an isolated worktree ─► tests.run evidence ─► review ─► merge to main on accept
+Release ─► readiness checklist from recorded evidence ─► Founder approval (deployment approval)
+```
+- **Priority changes** cascade to a project's open tasks, require a reason, never interrupt running work, and record their effects (tasks updated, running tasks left alone, queue position before and after) as a `Decision`.
+- **Pausing a project** stops its running tasks at the next safe checkpoint and blocks new claims. Resuming re-queues the tasks the pause stopped.
+- **Repositories:** Git runs server-side with hooks disabled and a minimal environment. Agents can't write `.git` metadata (tool check plus sandbox hook), and each worktree's pointer is verified before use. A merge conflict blocks acceptance and leaves `main` untouched.
+- **Test evidence:** `tests.run` and "Run tests on main" execute the unittest suite in the sandbox. A run counts as passing only with exit code 0 **and** a summary line carrying a per-run random nonce, so `os._exit(0)` or a printed fake summary doesn't pass. Agent-written tests can still be weak, which is why human review is still required.
+- **Release readiness** checks: repository exists, plan activated, all tasks completed, every reviewed deliverable accepted, and the test suite passed on the *current* `main` commit. An approved release is **authorized for deployment, not deployed**. Running deployments needs a deployment integration, which isn't included.
+- **Software policy** (Company settings): permitted categories, languages and frameworks, licensing, testing and security rules, repository conventions, web domain allowlist, and the CEO approval limit. Policies are given to planners and developers, and the category policy is enforced at approval.
 
 ---
 
@@ -139,7 +159,7 @@ See `.env.example` for the full list. The essentials:
 
 ## 4. Tests
 ```bash
-pytest            # 78 tests, about 30 s
+pytest            # 106 tests, about 45 s
 ```
 Coverage of spec §24: role and scoped permissions; unauthorized page, API and report access; model selection and fallback; rate limits, outages and backoff; invalid credentials; quota exhaustion; the circuit breaker; paid-model gating; budget enforcement; task retries, step limits and cancellation; dependency scheduling and cycle detection; recovery after a worker crash (idempotent and non-idempotent); approvals (CEO and Founder-only); tool grants, explicit deny, schema validation and path traversal; audit events and tamper detection; WebSocket auth and department filtering; sandbox isolation (network, filesystem, subprocess, ctypes, environment, timeout); prioritization and on-hold; report and budget calculations; sensitive Founder-only actions; exclusive claiming and concurrency limits; the emergency stop (before and during execution); backup, verification, tamper detection and restore; prompt-injection handling; and the full §26 scenario end to end through the HTTP views.
 
@@ -171,10 +191,9 @@ The adapters are tested over real HTTP against `tests/fake_llm.py`, a scripted t
 ---
 
 ## Roadmap
-Done here: **Phase 1** (foundation), **Phase 2** (engine), **Phase 3** (gateway), the **Phase 4** tool registry, permissions, sandbox, approvals and reviews, and **Phase 5** (3D office with a 2D fallback).
+Done here: **Phase 1** (foundation), **Phase 2** (engine), **Phase 3** (gateway), **Phase 4** (tool registry, permissions, sandbox, approvals, reviews, plus web.fetch, git.* and tests.run), **Phase 5** (3D office with a 2D fallback), and **Phase 6** (proposals, CEO and Founder governance, planning, priorities, Software Factory, releases).
 
 Next stages, building on the existing models and services:
-- **Phase 4+**: more tools (approved web fetch with SSRF protection, Git repositories per project, test runner, static analysis), plus project- and task-level grant UI.
-- **Phase 6**: research proposals, CEO evaluation and Founder override, proposal-to-plan decomposition, the Software Factory lifecycle with Git branches per task.
+- **Phase 6+**: static analysis and dependency/licence scanning tools, project- and task-level tool-grant UI, deployment integrations (executing approved releases), structured AI meetings for architecture and release reviews.
 - **Phase 7**: reports with CSV/PDF export, the knowledge base, AI meetings, notification preferences.
 - **Phase 8**: load testing, query optimization, further hardening.

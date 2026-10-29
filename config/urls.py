@@ -5,6 +5,7 @@ from apps.core import views as core
 from apps.gateway import views as gateway
 from apps.office import views as office
 from apps.tools import views as tools
+from apps.work import factory_views as factory
 from apps.work import views as work
 
 auth = [
@@ -44,6 +45,13 @@ urlpatterns = auth + [
     path("tasks/<int:pk>/", work.task_detail, name="task_detail"),
     path("tasks/<int:pk>/action/", work.task_action, name="task_action"),
     path("approvals/", work.approvals, name="approvals"),
+    path("proposals/", factory.proposal_board, name="proposal_board"),
+    path("proposals/new/", factory.proposal_create, name="proposal_create"),
+    path("proposals/<int:pk>/", factory.proposal_detail, name="proposal_detail"),
+    path("projects/", factory.project_list, name="project_list"),
+    path("projects/templates/", factory.project_templates, name="project_templates"),
+    path("projects/<int:pk>/", factory.project_detail, name="project_detail"),
+    path("projects/<int:pk>/action/", factory.project_action, name="project_action"),
     path("audit/", core.audit_log, name="audit_log"),
     path("settings/", core.company_settings, name="company_settings"),
     path("settings/users/", core.users_view, name="users"),

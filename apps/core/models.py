@@ -35,7 +35,17 @@ class CompanySettings(models.Model):
     mission = models.TextField(blank=True)
     strategy = models.TextField(blank=True, help_text="Goals, target markets, constraints.")
     development_standards = models.TextField(blank=True)
-    permitted_software_categories = models.JSONField(default=list, blank=True)
+    permitted_software_categories = models.JSONField(default=list, blank=True, help_text="Empty = all template categories.")
+    permitted_languages = models.JSONField(default=list, blank=True)
+    permitted_frameworks = models.JSONField(default=list, blank=True)
+    licensing_policy = models.TextField(blank=True, help_text="e.g. permitted dependency licenses.")
+    testing_rules = models.TextField(blank=True)
+    security_requirements = models.TextField(blank=True)
+    deployment_restrictions = models.TextField(blank=True)
+    repository_conventions = models.TextField(blank=True)
+    ceo_approval_limit_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                                 help_text="CEO may approve proposals up to this estimated cost; above needs the Founder.")
+    web_allowed_domains = models.JSONField(default=list, blank=True, help_text="If set, web.fetch is limited to these domains.")
     emergency_stop = models.BooleanField(default=False, help_text="Halts all new agent execution and tool use.")
     emergency_stop_reason = models.CharField(max_length=500, blank=True)
     paid_models_enabled = models.BooleanField(default=False, help_text="Paid API usage is disabled until the Founder enables it.")
@@ -157,6 +167,8 @@ class PermissionAssignment(models.Model):
         ("view_employees", "View employees"),
         ("manage_employees", "Create / edit employees"),
         ("view_tasks", "View tasks"),
+        ("view_projects", "View projects & proposals"),
+        ("manage_projects", "Manage projects"),
         ("manage_tasks", "Create / control tasks"),
         ("review_tasks", "Review deliverables"),
         ("view_reports", "View reports"),

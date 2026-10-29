@@ -194,3 +194,4 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": env("VCOOS_LOG_LEVEL", "INFO")},
     "loggers": {"django.db.backends": {"level": "WARNING"}},
 }
+VCOOS_WEB_FETCH_ALLOW_PRIVATE = False  # never enable in production (SSRF protection)

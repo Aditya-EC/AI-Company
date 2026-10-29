@@ -14,26 +14,84 @@ class Priority(models.IntegerChoices):
 
 
 class ProjectProposal(models.Model):
-    STATUSES = [("draft", "Draft"), ("submitted", "Submitted"), ("approved", "Approved"), ("rejected", "Rejected"),
-                ("deferred", "Deferred"), ("revision", "Revision requested")]
+    DRAFT, SUBMITTED, APPROVED, REJECTED, DEFERRED, REVISION, ESCALATED = (
+        "draft", "submitted", "approved", "rejected", "deferred", "revision", "escalated")
+    STATUSES = [(DRAFT, "Draft"), (SUBMITTED, "Submitted"), (APPROVED, "Approved"), (REJECTED, "Rejected"),
+                (DEFERRED, "Deferred"), (REVISION, "Revision requested"), (ESCALATED, "Escalated to Founder")]
     title = models.CharField(max_length=200)
-    problem_statement = models.TextField(blank=True)
-    content = models.JSONField(default=dict, blank=True, help_text="Structured proposal: users, research, features, risks...")
+    software_category = models.CharField(max_length=60, blank=True)
+    problem_statement = models.TextField()
+    target_users = models.TextField(blank=True)
+    market_research = models.TextField(blank=True, help_text="Market and competitor research summary.")
+    evidence = models.JSONField(default=list, blank=True,
+                                help_text="[{claim, source_url, retrieved}] - retrieved is set by the system, never by the agent.")
+    proposed_features = models.JSONField(default=list, blank=True)
+    technical_feasibility = models.TextField(blank=True)
+    recommended_stack = models.JSONField(default=list, blank=True)
+    estimated_effort_days = models.DecimalField(max_digits=8, decimal_places=1, null=True, blank=True)
+    estimated_cost_usd = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    risks = models.JSONField(default=list, blank=True)
+    revenue_hypothesis = models.TextField(blank=True)
+    validation_plan = models.TextField(blank=True)
+    confidence = models.PositiveSmallIntegerField(null=True, blank=True, help_text="0-100, as stated by the author.")
+    assumptions = models.JSONField(default=list, blank=True)
+    uncertainties = models.JSONField(default=list, blank=True)
+    department = models.ForeignKey("core.Department", null=True, blank=True, on_delete=models.SET_NULL, related_name="proposals")
     proposed_by = models.ForeignKey("core.EmployeeProfile", null=True, blank=True, on_delete=models.SET_NULL)
-    status = models.CharField(max_length=12, choices=STATUSES, default="draft", db_index=True)
+    submitted_by_user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    source_task = models.ForeignKey("work.Task", null=True, blank=True, on_delete=models.SET_NULL, related_name="produced_proposals")
+    revision_of = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="revisions")
+    status = models.CharField(max_length=12, choices=STATUSES, default=DRAFT, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def code(self):
+        return f"P-{self.pk}"
+
+
+class ProjectTemplate(models.Model):
+    """Software Factory template per category; guides planning (default milestones, stack)."""
+
+    category = models.CharField(max_length=60, unique=True)
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    default_milestones = models.JSONField(default=list, blank=True)
+    default_stack = models.JSONField(default=list, blank=True)
+    uses_repository = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
 
 
 class Project(models.Model):
-    STATUSES = [("planning", "Planning"), ("active", "Active"), ("paused", "Paused"), ("completed", "Completed"), ("cancelled", "Cancelled")]
+    PLANNING, ACTIVE, PAUSED, COMPLETED, CANCELLED = "planning", "active", "paused", "completed", "cancelled"
+    STATUSES = [(PLANNING, "Planning"), (ACTIVE, "Active"), (PAUSED, "Paused"), (COMPLETED, "Completed"), (CANCELLED, "Cancelled")]
+    PLAN_NONE, PLAN_IN_PROGRESS, PLAN_PROPOSED, PLAN_ACTIVE = "none", "in_progress", "proposed", "active"
+    PLAN_STATUSES = [(PLAN_NONE, "No plan"), (PLAN_IN_PROGRESS, "Planning in progress"), (PLAN_PROPOSED, "Plan awaiting activation"),
+                     (PLAN_ACTIVE, "Plan active")]
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    proposal = models.OneToOneField(ProjectProposal, null=True, blank=True, on_delete=models.SET_NULL)
+    proposal = models.OneToOneField(ProjectProposal, null=True, blank=True, on_delete=models.SET_NULL, related_name="project")
+    template = models.ForeignKey(ProjectTemplate, null=True, blank=True, on_delete=models.SET_NULL)
+    category = models.CharField(max_length=60, blank=True)
     department = models.ForeignKey("core.Department", null=True, blank=True, on_delete=models.SET_NULL, related_name="projects")
     priority = models.IntegerField(choices=Priority.choices, default=Priority.NORMAL)
-    status = models.CharField(max_length=12, choices=STATUSES, default="active", db_index=True)
+    status = models.CharField(max_length=12, choices=STATUSES, default=ACTIVE, db_index=True)
+    plan_status = models.CharField(max_length=12, choices=PLAN_STATUSES, default=PLAN_NONE)
+    has_repository = models.BooleanField(default=False)
     budget_usd = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
     deadline = models.DateField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -41,6 +99,30 @@ class Project(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def code(self):
+        return f"PRJ-{self.pk}"
+
+
+class Decision(models.Model):
+    """A recorded management decision (proposal reviews, overrides, priority changes, plan activation, releases)."""
+
+    KINDS = [("proposal", "Proposal decision"), ("override", "Founder override"), ("priority", "Priority change"),
+             ("plan", "Plan activation"), ("project_status", "Project status"), ("release", "Release decision")]
+    kind = models.CharField(max_length=20, choices=KINDS)
+    outcome = models.CharField(max_length=40)
+    rationale = models.TextField(blank=True)
+    effects = models.JSONField(default=dict, blank=True)
+    proposal = models.ForeignKey(ProjectProposal, null=True, blank=True, on_delete=models.CASCADE, related_name="decisions")
+    project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.CASCADE, related_name="decisions")
+    made_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    authority = models.CharField(max_length=10)  # founder / ceo
+    overrides = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="overridden_by")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
 
 
 class Milestone(models.Model):
@@ -80,7 +162,12 @@ class Task(models.Model):
     requires_approval = models.BooleanField(default=False, help_text="Execution needs an approved ApprovalRequest first.")
     is_confidential = models.BooleanField(default=False)
     is_idempotent = models.BooleanField(default=True, help_text="Safe to re-run automatically after an interruption.")
-    required_capabilities = models.JSONField(default=list, blank=True)
+    required_capabilities = models.JSONField(default=list, blank=True, help_text="Model capabilities, e.g. ['json'].")
+    required_skills = models.JSONField(default=list, blank=True, help_text="Employee skills used for automatic assignment.")
+    DELIVERABLE, PROPOSAL, PLAN = "deliverable", "proposal", "plan"
+    OUTPUT_KINDS = [(DELIVERABLE, "Deliverable"), (PROPOSAL, "Project proposal"), (PLAN, "Project plan")]
+    output_kind = models.CharField(max_length=12, choices=OUTPUT_KINDS, default=DELIVERABLE)
+    branch_name = models.CharField(max_length=80, blank=True, help_text="Git branch in the project repository.")
     # Limits
     max_retries = models.PositiveIntegerField(default=2)
     retry_count = models.PositiveIntegerField(default=0)
@@ -223,3 +310,49 @@ class ApprovalRequest(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class TestRun(models.Model):
+    """Actual test execution evidence. Results come from the test runner's exit code and output, never from an agent's claim."""
+
+    __test__ = False  # not a pytest class
+    project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.CASCADE, related_name="test_runs")
+    task = models.ForeignKey(Task, null=True, blank=True, on_delete=models.SET_NULL, related_name="test_runs")
+    execution = models.ForeignKey(TaskExecution, null=True, blank=True, on_delete=models.SET_NULL)
+    ref = models.CharField(max_length=80, help_text="Branch or 'main'.")
+    commit_sha = models.CharField(max_length=40, blank=True)
+    dirty = models.BooleanField(default=False, help_text="Working tree had uncommitted changes.")
+    command = models.CharField(max_length=200)
+    exit_code = models.IntegerField()
+    tests_run = models.PositiveIntegerField(null=True, blank=True)
+    failures = models.PositiveIntegerField(null=True, blank=True)
+    passed = models.BooleanField()
+    timed_out = models.BooleanField(default=False)
+    output = models.TextField(blank=True)
+    triggered_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class Release(models.Model):
+    DRAFT, AWAITING_APPROVAL, APPROVED, REJECTED = "draft", "awaiting_approval", "approved", "rejected"
+    STATUSES = [(DRAFT, "Draft"), (AWAITING_APPROVAL, "Awaiting Founder approval"), (APPROVED, "Approved for deployment"),
+                (REJECTED, "Rejected")]
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="releases")
+    version = models.CharField(max_length=40)
+    status = models.CharField(max_length=20, choices=STATUSES, default=DRAFT)
+    release_notes = models.TextField()
+    known_issues = models.TextField(blank=True)
+    deployment_plan = models.TextField(blank=True)
+    commit_sha = models.CharField(max_length=40, blank=True)
+    test_run = models.ForeignKey(TestRun, null=True, blank=True, on_delete=models.SET_NULL)
+    checklist = models.JSONField(default=dict, blank=True, help_text="Readiness evidence snapshot at submission time.")
+    approval = models.OneToOneField(ApprovalRequest, null=True, blank=True, on_delete=models.SET_NULL, related_name="release")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [models.UniqueConstraint(fields=["project", "version"], name="uniq_project_version")]

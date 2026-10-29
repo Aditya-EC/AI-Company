@@ -31,6 +31,11 @@ def inside(p):
     p = os.path.realpath(os.fsdecode(p))
     return p == WS or p.startswith(WS + os.sep)
 
+def writable(p):
+    # Never let agent code touch git metadata (it could redirect server-side git operations).
+    rel = os.path.relpath(os.path.realpath(os.fsdecode(p)), WS)
+    return inside(p) and ".git" not in rel.split(os.sep)
+
 def readable(p):
     p = os.path.realpath(os.fsdecode(p))
     return inside(p) or p.startswith(READ_OK)
@@ -45,18 +50,20 @@ def hook(event, args):
         if isinstance(path, int) or path is None:
             return
         writing = (isinstance(mode, str) and any(c in mode for c in "wax+")) or (isinstance(flags, int) and flags & WRITE_FLAGS)
-        if (writing and not inside(path)) or not readable(path):
+        if (writing and not writable(path)) or not readable(path):
             raise PermissionError("sandbox: file access outside the workspace is not permitted")
     if event in PATH_EVENTS:
         for a in args:
             if isinstance(a, (str, bytes, os.PathLike)):
-                ok = readable(a) if event in ("os.listdir", "os.scandir") else inside(a)
+                ok = readable(a) if event in ("os.listdir", "os.scandir") else writable(a)
                 if not ok:
                     raise PermissionError(f"sandbox: {event} outside the workspace is not permitted")
 
 sys.addaudithook(hook)
 del hook
-exec(compile(code, "<agent-code>", "exec"), {"__name__": "__main__"})
+_compiled = compile(code, "<agent-code>", "exec")
+del code
+exec(_compiled, {"__name__": "__main__"})
 '''
 
 OUTPUT_LIMIT = 64 * 1024

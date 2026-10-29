@@ -27,6 +27,9 @@ CEO_ALLOWED = {
     "control_employees",  # pause / resume
     "view_tasks",
     "manage_tasks",
+    "view_projects",
+    "manage_projects",
+    "decide_proposals",  # within ceo_approval_limit_usd; never staff-grantable
     "review_tasks",
     "view_reports",
     "view_monitor",
@@ -48,6 +51,8 @@ def _scope_of(obj):
         return obj.department_id, None
     if label == "work.project":
         return obj.department_id, obj.pk
+    if label == "work.projectproposal":
+        return obj.department_id, None
     if label in ("work.task",):
         return obj.department_id, obj.project_id
     return getattr(obj, "department_id", None), getattr(obj, "project_id", None)

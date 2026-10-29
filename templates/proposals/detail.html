@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}{{ p.code }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="mono muted">{{ p.code }}{% if p.revision_of %} · revises <a href="{% url 'proposal_detail' p.revision_of_id %}">P-{{ p.revision_of_id }}</a>{% endif %}</div><h1>{{ p.title }}</h1>
+<div class="row"><span class="badge {{ p.status|badge }}">{{ p.get_status_display }}</span><span class="muted small">{% if p.proposed_by %}by {{ p.proposed_by.name }} ({{ p.proposed_by.job_title }}){% if p.source_task %} via <a href="{% url 'task_detail' p.source_task_id %}">{{ p.source_task.code }}</a>{% endif %}{% else %}human-authored{% endif %} · {{ p.created_at|date:"Y-m-d H:i" }}</span></div></div>
+{% if project %}<a class="btn primary" href="{% url 'project_detail' project.pk %}">Open project {{ project.code }}</a>{% endif %}</div>
+<div class="grid g3"><div class="span2 stack">
+<div class="card"><h2>Problem</h2><div style="white-space:pre-wrap">{{ p.problem_statement }}</div>
+<h3 style="margin-top:14px">Target users</h3><div style="white-space:pre-wrap">{{ p.target_users|default:"—" }}</div>
+{% if p.market_research %}<h3 style="margin-top:14px">Market &amp; competitor research</h3><div style="white-space:pre-wrap">{{ p.market_research }}</div>{% endif %}</div>
+<div class="card"><h2>Evidence</h2><p class="muted small">"Retrieved" means the system observed the researcher fetching that source during the task. It does not mean the claim has been fact-checked.</p>
+<table class="table"><tbody>{% for e in p.evidence %}<tr><td>{{ e.claim }}</td><td class="small" style="max-width:260px;overflow-wrap:anywhere">{% if e.source_url %}<a href="{{ e.source_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ e.source_url|truncatechars:60 }}</a>{% else %}<span class="muted">no source</span>{% endif %}</td>
+<td>{% if e.retrieved %}<span class="badge b-ok">retrieved</span>{% else %}<span class="badge b-warn">not retrieved — unverified</span>{% endif %}</td></tr>{% empty %}<tr><td class="muted">No evidence provided.</td></tr>{% endfor %}</tbody></table>
+<div class="small muted">{{ retrieved_count }} of {{ p.evidence|length }} sources retrieved.</div></div>
+<div class="grid g2"><div class="card"><h2>Assumptions</h2>{% for a in p.assumptions %}<div>• {{ a }}</div>{% empty %}<div class="muted">None stated.</div>{% endfor %}</div>
+<div class="card"><h2>Uncertainties</h2>{% for a in p.uncertainties %}<div>• {{ a }}</div>{% empty %}<div class="muted">None stated.</div>{% endfor %}</div></div>
+<div class="card"><h2>Solution</h2><h3>Proposed features</h3>{% for f in p.proposed_features %}<div>• {{ f }}</div>{% endfor %}
+<h3 style="margin-top:14px">Technical feasibility</h3><div style="white-space:pre-wrap">{{ p.technical_feasibility|default:"—" }}</div>
+<h3 style="margin-top:14px">Recommended stack</h3><div>{{ p.recommended_stack|join:", "|default:"—" }}</div>
+<h3 style="margin-top:14px">Risks</h3>{% for r in p.risks %}<div>• {{ r }}</div>{% empty %}<div class="muted">None stated.</div>{% endfor %}
+<h3 style="margin-top:14px">Revenue hypothesis</h3><div style="white-space:pre-wrap">{{ p.revenue_hypothesis|default:"—" }}</div>
+<h3 style="margin-top:14px">Validation plan</h3><div style="white-space:pre-wrap">{{ p.validation_plan|default:"—" }}</div></div>
+</div><div class="stack">
+<div class="card"><h2>Estimates</h2><dl class="kv"><dt>Category</dt><dd>{{ p.software_category|default:"—" }}</dd><dt>Effort</dt><dd>{% if p.estimated_effort_days is not None %}{{ p.estimated_effort_days }} days{% else %}—{% endif %}</dd>
+<dt>Cost</dt><dd>{% if p.estimated_cost_usd is not None %}${{ p.estimated_cost_usd }}{% else %}not estimated{% endif %}</dd><dt>Confidence</dt><dd>{% if p.confidence is not None %}{{ p.confidence }}% (author's own){% else %}—{% endif %}</dd>
+<dt>Department</dt><dd>{{ p.department.name|default:"—" }}</dd><dt>CEO limit</dt><dd>${{ ceo_limit }}</dd></dl></div>
+{% if form %}<div class="card" style="border-color:var(--accent)"><h2>Decision</h2>{% if user.is_founder and decisions %}<p class="small muted">As Founder, a new decision here overrides the previous one and is recorded as an override.</p>{% elif not user.is_founder %}<p class="small muted">CEO authority: approvals up to ${{ ceo_limit }} with a cost estimate. Escalate anything above.</p>{% endif %}
+<form method="post">{% csrf_token %}{% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}<button class="btn primary">Record decision</button></form></div>{% endif %}
+<div class="card"><h2>Decision history</h2><ul class="timeline small">{% for d in decisions %}<li><strong>{{ d.outcome }}</strong> by {{ d.made_by.username }} ({{ d.authority }}){% if d.kind == "override" %} <span class="badge b-warn">override</span>{% endif %} <span class="muted">{{ d.created_at|date:"Y-m-d H:i" }}</span>{% if d.rationale %}<div>{{ d.rationale }}</div>{% endif %}</li>{% empty %}<li class="muted">No decisions yet.</li>{% endfor %}</ul></div>
+{% if revisions %}<div class="card"><h2>Revisions</h2>{% for r in revisions %}<div><a href="{% url 'proposal_detail' r.pk %}">{{ r.code }}</a> <span class="badge {{ r.status|badge }}">{{ r.get_status_display }}</span></div>{% endfor %}</div>{% endif %}
+</div></div>{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load vcoos %}{% block title %}Projects{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Projects</h1><div class="muted">Projects start from approved proposals. Progress counts completed tasks, not agent claims.</div></div><a class="btn" href="{% url 'project_templates' %}">Software Factory templates</a></div>
+<div class="card table-wrap"><table class="table"><thead><tr><th>Project</th><th>Category</th><th>Priority</th><th>Status</th><th>Plan</th><th>Tasks done</th></tr></thead><tbody>
+{% for p in projects %}<tr><td><a href="{% url 'project_detail' p.pk %}">{{ p.name }}</a><div class="mono small muted">{{ p.code }}</div></td><td>{{ p.category|default:"—" }}</td><td>{{ p.get_priority_display }}</td>
+<td><span class="badge {% if p.status == 'active' %}b-ok{% elif p.status == 'paused' %}b-warn{% elif p.status == 'cancelled' %}{% else %}b-info{% endif %}">{{ p.get_status_display }}</span></td><td class="small">{{ p.get_plan_status_display }}</td>
+<td style="min-width:120px">{{ p.n_done }} / {{ p.n_tasks }}<div style="height:6px;background:var(--muted-bg);border-radius:4px"><div style="height:6px;width:{{ p.n_done|pct:p.n_tasks }}%;background:var(--ok);border-radius:4px"></div></div></td></tr>
+{% empty %}<tr><td colspan="6"><div class="empty">No projects yet. Approve a proposal to start one.</div></td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

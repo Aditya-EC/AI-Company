@@ -169,7 +169,8 @@ def review_task(task, *, user, outcome, comments=""):
         review = Review.objects.create(task=task, reviewer=user, outcome=outcome, comments=comments)
         audit.record("task.reviewed", user=user, target=task, details={"outcome": outcome})
         if outcome == Review.ACCEPT:
-            transition(task, T.COMPLETED, user=user, reason="accepted in review")
+            merged = _merge_task_branch(task, user)
+            transition(task, T.COMPLETED, user=user, reason="accepted in review" + (f"; merged to main at {merged[:10]}" if merged else ""))
             if task.parent_task_id and task.parent_task.status == T.REVISION:
                 transition(task.parent_task, T.COMPLETED, user=user, reason=f"superseded by accepted revision {task.code}")
             return review, None
@@ -180,13 +181,29 @@ def review_task(task, *, user, outcome, comments=""):
             acceptance_criteria=task.acceptance_criteria, project=task.project, department=task.department,
             assigned_employee=task.assigned_employee, parent_task=task, created_by=user, priority=task.priority,
             requires_review=True, reviewer=task.reviewer, is_confidential=task.is_confidential,
-            required_capabilities=task.required_capabilities, max_retries=task.max_retries, max_steps=task.max_steps,
+            required_capabilities=task.required_capabilities, required_skills=task.required_skills, max_retries=task.max_retries, max_steps=task.max_steps,
             max_runtime_seconds=task.max_runtime_seconds, max_cost_usd=task.max_cost_usd,
         )
         audit.record("task.revision_created", user=user, target=revision, details={"parent": task.pk})
     queue_task(revision, user=user, reason="revision after rejected review")
     notify_user(task.created_by, "review", f"{task.code} rejected; revision {revision.code} queued", comments[:500])
     return review, revision
+
+
+def _merge_task_branch(task, user):
+    """Software Factory: accepted work is merged into main. A conflict blocks acceptance."""
+    if not (task.project_id and task.project.has_repository and task.branch_name):
+        return None
+    from . import repo
+
+    try:
+        sha = repo.merge_branch(task.project, task.branch_name, f"Merge {task.code} {task.title} (accepted by {user.username})")
+    except repo.MergeConflict as exc:
+        raise InvalidTransition(f"{exc}. Reject with instructions to resolve the conflict, or merge manually.")
+    except repo.RepoError as exc:
+        raise InvalidTransition(f"Could not merge: {exc}")
+    audit.record("repo.merged", user=user, target=task, details={"branch": task.branch_name, "main": sha})
+    return sha
 
 
 def decide_approval(approval, *, user, approve, note=""):
@@ -202,6 +219,10 @@ def decide_approval(approval, *, user, approve, note=""):
     approval.decided_by, approval.decided_at, approval.decision_note = user, timezone.now(), note
     approval.save()
     audit.record("approval.decided", user=user, target=approval, details={"approved": approve, "kind": approval.kind})
+    if approval.kind == "deployment":
+        from .projects import on_release_decision
+
+        on_release_decision(approval, user, approve)
     if approval.task_id and approval.kind == "task_execution":
         task = approval.task
         if approve:

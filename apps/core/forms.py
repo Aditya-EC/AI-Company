@@ -114,6 +114,7 @@ class RoleTemplateForm(StyledMixin, forms.ModelForm):
 
 
 class ProviderForm(StyledMixin, forms.ModelForm):
+    base_url = forms.URLField(max_length=300, assume_scheme="http", help_text="Local Ollama is usually http://localhost:11434")
     api_key = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), label="API key (stored encrypted)",
                               help_text="Leave blank to keep the current key. Prefer a credential reference like env:OPENAI_API_KEY.")
 
@@ -158,6 +159,8 @@ class TaskForm(StyledMixin, forms.ModelForm):
 
     depends_on = forms.ModelMultipleChoiceField(queryset=Task.objects.none(), required=False,
                                                 help_text="Task will stay blocked until these complete.")
+    skills_text = forms.CharField(label="Required skills", required=False,
+                                  help_text="Comma separated; used when the engine picks the assignee.")
 
     def __init__(self, *a, user=None, **kw):
         super().__init__(*a, **kw)
@@ -181,12 +184,33 @@ class TaskForm(StyledMixin, forms.ModelForm):
         return data
 
 
+class _Lines(forms.CharField):
+    def __init__(self, **kw):
+        super().__init__(required=False, widget=forms.Textarea(attrs={"rows": 2}), help_text="One per line.", **kw)
+
+    def prepare_value(self, value):
+        return "\n".join(value) if isinstance(value, list) else value
+
+    def to_python(self, value):
+        return _lines_to_list(value)
+
+
 class CompanySettingsForm(StyledMixin, forms.ModelForm):
+    permitted_software_categories = _Lines()
+    permitted_languages = _Lines()
+    permitted_frameworks = _Lines()
+    web_allowed_domains = _Lines()
+
     class Meta:
         model = CompanySettings
         fields = ["name", "mission", "strategy", "development_standards", "max_concurrent_tasks", "default_max_retries",
-                  "default_max_runtime_seconds", "default_max_steps", "ceo_user", "ceo_employee"]
-        widgets = {f: forms.Textarea(attrs={"rows": 3}) for f in ["mission", "strategy", "development_standards"]}
+                  "default_max_runtime_seconds", "default_max_steps", "ceo_user", "ceo_employee", "ceo_approval_limit_usd",
+                  "permitted_software_categories", "permitted_languages", "permitted_frameworks", "licensing_policy",
+                  "testing_rules", "security_requirements", "deployment_restrictions", "repository_conventions",
+                  "web_allowed_domains"]
+        widgets = {f: forms.Textarea(attrs={"rows": 3}) for f in
+                   ["mission", "strategy", "development_standards", "licensing_policy", "testing_rules", "security_requirements",
+                    "deployment_restrictions", "repository_conventions"]}
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)

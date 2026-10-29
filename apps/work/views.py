@@ -43,6 +43,7 @@ def task_create(request):
         with transaction.atomic():
             task = form.save(commit=False)
             task.created_by = request.user
+            task.required_skills = [x.strip().lower() for x in form.cleaned_data["skills_text"].split(",") if x.strip()]
             if task.assigned_employee and task.assigned_employee.role_template:
                 task.required_capabilities = list(task.assigned_employee.role_template.required_capabilities)
             task.save()
