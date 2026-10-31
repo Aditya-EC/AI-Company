@@ -1,16 +1,32 @@
 {% extends "base.html" %}{% load static %}{% block title %}Virtual office{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Virtual office</h1><div class="muted">Avatars mirror real engine state. Drag to rotate, scroll to zoom, right-drag to pan. Click a person or a room.</div></div>
-<div class="row"><span class="muted small" id="office-sync">Connecting…</span><a class="btn sm" href="?mode={% if force_2d %}3d{% else %}2d{% endif %}" id="mode-link">{% if force_2d %}3D view{% else %}2D view{% endif %}</a></div></div>
 {% csrf_token %}
-<div class="office-layout">
-  <div>
-    <div class="office-canvas" id="office-canvas" {% if force_2d %}hidden{% endif %}>
-      <div class="office-legend small" id="office-legend"></div>
+<div class="hq" id="hq">
+  <div class="hq-canvas" id="office-canvas" {% if force_2d %}hidden{% endif %}></div>
+  <div class="hq-2d" id="office-2d" {% if not force_2d %}hidden{% endif %}></div>
+
+  <div class="hq-bar">
+    <div class="hq-title"><strong>Virtual office</strong><span class="hq-sub" id="office-sync">Connecting…</span></div>
+    <div class="hq-pills">
+      <span class="hq-pill" id="hq-agents">— agents</span>
+      <span class="hq-pill" id="hq-engine" title="Engine workers with a recent heartbeat">engine —</span>
+      <button class="hq-btn" type="button" id="hq-home" hidden>← Back to HQ</button>
+      <a class="hq-btn" href="?mode={% if force_2d %}3d{% else %}2d{% endif %}" id="mode-link">{% if force_2d %}3D view{% else %}2D view{% endif %}</a>
+      <button class="hq-btn" type="button" id="hq-fx" title="Glow and shadows">Effects</button>
     </div>
-    <div class="office-2d" id="office-2d" {% if not force_2d %}hidden{% endif %}></div>
   </div>
-  <aside class="card drawer" id="drawer" aria-live="polite"><h2>Inspector</h2><div class="muted">Select an employee or a room to see live details.</div></aside>
+
+  <aside class="hq-panel" id="drawer" aria-live="polite" hidden></aside>
+  <div class="hq-feed" id="hq-feed" aria-live="polite"></div>
+
+  <div class="hq-foot">
+    <div class="hq-models" id="hq-models"></div>
+    <div class="hq-legend" id="office-legend"></div>
+  </div>
+  <div class="hq-minimap" id="hq-minimap" hidden>
+    <canvas id="minimap" width="176" height="132" aria-label="Office map: click a room to fly there"></canvas>
+    <div class="hq-map-btns"><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="zoom-fit" aria-label="Show whole office">⤢</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button></div>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -20,6 +36,6 @@
 <script type="module" src="{% static 'js/office3d.js' %}"></script>
 <script nonce="{{ request.csp_nonce }}">
   // If the 3D module cannot load (offline CDN, old browser), fall back to 2D after a grace period.
-  setTimeout(() => { if (!window.VCOOS_3D_READY && !window.VCOOS_OFFICE.force2d) VCOOSOffice.fallback2d("3D renderer unavailable"); }, 6000);
+  setTimeout(() => { if (!window.VCOOS_3D_READY && !window.VCOOS_OFFICE.force2d) VCOOSOffice.fallback2d("3D renderer unavailable"); }, 8000);
 </script>
 {% endblock %}

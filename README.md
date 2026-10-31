@@ -69,9 +69,19 @@ Budget (company|department|employee|project|provider × daily|monthly|total)   A
 | `templates/`, `static/` | UI (light and dark themes, responsive) and the Three.js office |
 | `apps/knowledge/` | knowledge base (documents, versions, review rules, agent context) and AI meetings |
 | `apps/reports/` | report calculations, CSV/PDF export, export jobs |
-| `tests/` | 147 tests: the §26 scenario, the Phase 6–8 workflows, concurrency/load and query-count checks |
+| `tests/` | 149 tests: the §26 scenario, the Phase 6–8 workflows, concurrency/load and query-count checks |
 | `docs/` | security model and review findings (`SECURITY.md`), operations runbook (`OPERATIONS.md`) |
 | `deploy/` | systemd units, nginx config, backup timer |
+
+### Virtual office (HQ)
+The office (`/office/`) is a Three.js night scene:
+- **Layout:** department rooms sit in a ring around the **orchestration engine hub**, joined to it by paths. The ring order follows the Founder's department grid settings.
+- **Agents and status:** every AI employee sits at a desk with their real status: a coloured ring, a monitor glow, and a name tag showing their task. An empty chair means the employee is offline.
+- **Live activity:** light flows along a room's path **only** while that team has running tasks.
+- **The hub:** its rings turn faster with more running work, and it turns amber when no engine worker is alive.
+- **Navigation:** click a room to fly in and open the team panel (done today, running, average turnaround, queue, review, tools, agents). Click an agent for their profile, or the hub for engine statistics.
+- **On-screen interface:** a live event feed (from WebSockets), a minimap with zoom controls, the models used in the last 24 hours, and an effects toggle (bloom and shadows, remembered per browser).
+- **Fallbacks:** a full 2D view is available (`?mode=2d`) and is used automatically when WebGL is unavailable. On phones, panels become bottom sheets.
 
 ### Company workflow (Phase 6)
 ```
@@ -185,7 +195,7 @@ See `.env.example` for the full list. The essentials:
 
 ## 4. Tests
 ```bash
-pytest            # 147 tests, about 1-2 minutes (SQLite)
+pytest            # 149 tests, about 1-2 minutes (SQLite)
 ```
 Run the same suite against PostgreSQL (the backup/restore rehearsal test only runs there):
 ```bash
